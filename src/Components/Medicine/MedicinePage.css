@@ -1,0 +1,410 @@
+/* Medicine Page Styles */
+.medicine-page {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Page Header */
+.medicine-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.medicine-page__title-section {
+  flex: 1;
+}
+
+.medicine-page__title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-color, #1f2937);
+  margin: 0 0 0.5rem 0;
+}
+
+.medicine-page__subtitle {
+  font-size: 1rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.medicine-page__actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.medicine-page__btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  font-size: 0.875rem;
+}
+
+.medicine-page__btn--primary {
+  background: var(--primary-color, #3b82f6);
+  color: white;
+}
+
+.medicine-page__btn--primary:hover {
+  background: var(--secondary-color, #1e40af);
+  transform: translateY(-1px);
+}
+
+.medicine-page__btn--secondary {
+  background: white;
+  color: var(--text-color, #1f2937);
+  border: 1px solid #d1d5db;
+}
+
+.medicine-page__btn--secondary:hover {
+  background: #f9fafb;
+  border-color: var(--primary-color, #3b82f6);
+}
+
+/* Bulk Upload */
+.medicine-page__bulk-upload {
+  margin-bottom: 2rem;
+}
+
+.medicine-bulk-upload {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.medicine-bulk-upload__dropzone {
+  flex: 1;
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  transition: border-color 0.2s ease;
+  cursor: pointer;
+}
+
+.medicine-bulk-upload__dropzone:hover {
+  border-color: var(--primary-color, #3b82f6);
+}
+
+.medicine-bulk-upload__icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.medicine-bulk-upload__text {
+  font-size: 1rem;
+  color: #6b7280;
+  margin: 0 0 1rem 0;
+}
+
+.medicine-bulk-upload__btn {
+  padding: 0.5rem 1rem;
+  background: var(--primary-color, #3b82f6);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.medicine-bulk-upload__info {
+  flex: 1;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.medicine-bulk-upload__template {
+  background: none;
+  border: 1px solid #d1d5db;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+/* Bulk Actions */
+.medicine-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.medicine-bulk-actions__count {
+  font-weight: 500;
+  color: var(--primary-color, #3b82f6);
+}
+
+.medicine-bulk-actions__btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.medicine-bulk-actions__btn--activate {
+  background: #10b981;
+  color: white;
+}
+
+.medicine-bulk-actions__btn--activate:hover {
+  background: #059669;
+}
+
+.medicine-bulk-actions__btn--deactivate {
+  background: #f59e0b;
+  color: white;
+}
+
+.medicine-bulk-actions__btn--deactivate:hover {
+  background: #d97706;
+}
+
+.medicine-bulk-actions__btn--delete {
+  background: #ef4444;
+  color: white;
+}
+
+.medicine-bulk-actions__btn--delete:hover {
+  background: #dc2626;
+}
+
+/* Table Actions */
+.medicine-page__table-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.medicine-page__filter {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.medicine-page__filter:focus {
+  outline: none;
+  border-color: var(--primary-color, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Medicine Image */
+.medicine-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+}
+
+.medicine-image__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.medicine-image__placeholder {
+  width: 100%;
+  height: 100%;
+  background: #f3f4f6;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: #9ca3af;
+}
+
+.medicine-image__placeholder.hidden {
+  display: none;
+}
+
+/* Medicine Name */
+.medicine-name {
+  max-width: 200px;
+}
+
+.medicine-name__title {
+  font-weight: 600;
+  color: var(--text-color, #1f2937);
+  margin-bottom: 0.25rem;
+  line-height: 1.4;
+}
+
+.medicine-name__description {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Medicine Category */
+.medicine-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  background: #f0f9ff;
+  color: #0369a1;
+  border-radius: 12px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* Medicine Manufacturer */
+.medicine-manufacturer {
+  max-width: 150px;
+}
+
+.medicine-manufacturer__name {
+  font-weight: 500;
+  color: var(--text-color, #1f2937);
+  margin-bottom: 0.125rem;
+}
+
+.medicine-manufacturer__country {
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+/* Medicine Form */
+.medicine-form {
+  padding: 0.25rem 0.75rem;
+  background: #f3f4f6;
+  color: #374151;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* Medicine Status */
+.medicine-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.medicine-status--active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.medicine-status--inactive {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+/* Medicine Actions */
+.medicine-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.medicine-actions__btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.medicine-actions__btn--edit {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.medicine-actions__btn--edit:hover {
+  background: #dbeafe;
+}
+
+.medicine-actions__btn--delete {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.medicine-actions__btn--delete:hover {
+  background: #fecaca;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .medicine-page {
+    padding: 1rem;
+  }
+  
+  .medicine-page__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .medicine-page__actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .medicine-bulk-upload {
+    flex-direction: column;
+  }
+  
+  .medicine-bulk-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 768px) {
+  .medicine-page__title {
+    font-size: 1.5rem;
+  }
+  
+  .medicine-page__actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .medicine-page__btn {
+    width: 100%;
+  }
+  
+  .medicine-bulk-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .medicine-bulk-actions__btn {
+    width: 100%;
+  }
+}

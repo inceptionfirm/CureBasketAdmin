@@ -1,0 +1,127 @@
+/* Line Chart Styles */
+.line-chart {
+  background: var(--dashboard-surface);
+  border-radius: var(--dashboard-card-radius);
+  padding: var(--dashboard-card-padding);
+  box-shadow: var(--dashboard-card-shadow);
+  border: 1px solid var(--dashboard-border);
+  transition: all 0.3s ease;
+}
+
+.line-chart:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.line-chart-header {
+  margin-bottom: 1rem;
+}
+
+.line-chart-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--dashboard-text-secondary);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.line-chart-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.line-chart-svg {
+  width: 100%;
+  height: auto;
+}
+
+.line-chart-grid line {
+  stroke-dasharray: 2,2;
+}
+
+.line-chart-y-labels {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px 0;
+  font-size: 0.75rem;
+  color: var(--dashboard-text-muted);
+  font-weight: 500;
+}
+
+.line-chart-y-label {
+  text-align: right;
+  padding-right: 8px;
+}
+
+.line-chart-x-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 0 20px;
+  font-size: 0.75rem;
+  color: var(--dashboard-text-muted);
+  font-weight: 500;
+}
+
+.line-chart-x-label {
+  text-align: center;
+  flex: 1;
+}
+
+/* Animations */
+.line-chart-svg.animated .line-chart-line-animated {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: drawLine 2s ease-in-out forwards;
+}
+
+.line-chart-svg.animated .line-chart-area-animated {
+  opacity: 0;
+  animation: fadeInArea 1s ease-in-out 0.5s forwards;
+}
+
+.line-chart-svg.animated .line-chart-dot-animated {
+  opacity: 0;
+  animation: fadeInDot 0.3s ease-in-out forwards;
+}
+
+@keyframes drawLine {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fadeInArea {
+  to {
+    opacity: 0.2;
+  }
+}
+
+@keyframes fadeInDot {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .line-chart {
+    padding: 1rem;
+  }
+  
+  .line-chart-y-labels {
+    font-size: 0.7rem;
+  }
+  
+  .line-chart-x-labels {
+    font-size: 0.7rem;
+  }
+}
+
