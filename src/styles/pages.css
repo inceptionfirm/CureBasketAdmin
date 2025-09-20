@@ -1,0 +1,56 @@
+/* Common page styles for all admin pages */
+.page-header {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--global-border);
+}
+
+.page-header h1 {
+  margin: 0 0 8px 0;
+  color: var(--global-text-primary);
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.page-header p {
+  margin: 0;
+  color: var(--global-text-secondary);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+/* Admin main content area */
+.admin-main {
+  padding: 30px;
+  min-height: calc(100vh - 80px);
+  background: var(--global-bg-primary);
+  color: var(--global-text-primary);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .admin-main {
+    padding: 20px 15px;
+  }
+  
+  .page-header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .page-header p {
+    font-size: 0.9rem;
+  }
+}
+
+/* Dark theme adjustments */
+.dark-theme .page-header {
+  border-bottom-color: var(--global-border);
+}
+
+.dark-theme .page-header h1 {
+  color: var(--global-text-primary);
+}
+
+.dark-theme .page-header p {
+  color: var(--global-text-secondary);
+}

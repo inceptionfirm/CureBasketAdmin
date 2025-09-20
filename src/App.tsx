@@ -11,11 +11,17 @@ import Header from './Components/Header/Header';
 import Dashboard from './Components/Dashboard/Dashboard';
 import Profile from './Components/Profile/Profile';
 import Settings from './Components/Settings/Settings';
+import Users from './Components/Users/Users';
+import Categories from './Components/Categories/Categories';
+import Blogs from './Components/Blogs/Blogs';
+import BannerManagement from './Components/BannerManagement/BannerManagement';
+import Prescriptions from './Components/Prescriptions/Prescriptions';
 import GlobalThemeWrapper from './Components/GlobalThemeWrapper';
 import './App.css';
 import './styles/dynamic.css';
 import './styles/dashboard.css';
 import './styles/admin-panel.css';
+import './styles/pages.css';
 
 function AdminLayout(): React.JSX.Element {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(window.innerWidth > 1024);
@@ -89,11 +95,11 @@ function AdminLayout(): React.JSX.Element {
       <div className={`admin-content ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
         <Routes>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/users" element={<div className="admin-main"><h1>Users Management</h1><p>Users page content will be here</p></div>} />
-          <Route path="/categories" element={<div className="admin-main"><h1>Categories Management</h1><p>Categories page content will be here</p></div>} />
-          <Route path="/blogs" element={<div className="admin-main"><h1>Blogs Management</h1><p>Blogs page content will be here</p></div>} />
-          <Route path="/banner-management" element={<div className="admin-main"><h1>Banner Management</h1><p>Banner management content will be here</p></div>} />
-          <Route path="/prescriptions" element={<div className="admin-main"><h1>Prescriptions Management</h1><p>Prescriptions page content will be here</p></div>} />
+          <Route path="/users" element={<Users />} />
+          <Route path="/categories" element={<Categories />} />
+          <Route path="/blogs" element={<Blogs />} />
+          <Route path="/banner-management" element={<BannerManagement />} />
+          <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/medicine" element={<div className="admin-main"><h1>Medicine Management</h1><p>Medicine page content will be here</p></div>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />

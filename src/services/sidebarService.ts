@@ -1,4 +1,3 @@
-// Sidebar Service - Fetches dynamic menu items from backend
 import { mockSidebarApi } from '../mockApi/sidebarApi';
 
 export interface SidebarMenuItem {
@@ -19,7 +18,6 @@ export interface SidebarConfig {
   lastUpdated: string;
 }
 
-// Default fallback menu items
 const DEFAULT_MENU_ITEMS: SidebarMenuItem[] = [
   {
     id: 'dashboard',
@@ -29,40 +27,62 @@ const DEFAULT_MENU_ITEMS: SidebarMenuItem[] = [
     order: 1
   },
   {
-    id: 'orders',
-    title: 'Orders',
-    icon: '📦',
-    path: '/orders',
-    badge: 12,
+    id: 'users',
+    title: 'Users',
+    icon: '👥',
+    path: '/users',
+    badge: 5,
     order: 2
   },
   {
-    id: 'products',
-    title: 'Products',
-    icon: '🛍️',
-    path: '/products',
+    id: 'categories',
+    title: 'Categories',
+    icon: '📂',
+    path: '/categories',
     order: 3
   },
   {
-    id: 'customers',
-    title: 'Customers',
-    icon: '👥',
-    path: '/customers',
+    id: 'blogs',
+    title: 'Blogs',
+    icon: '📝',
+    path: '/blogs',
     order: 4
   },
   {
-    id: 'analytics',
-    title: 'Analytics',
-    icon: '📈',
-    path: '/analytics',
+    id: 'banner-management',
+    title: 'Banner Management',
+    icon: '🖼️',
+    path: '/banner-management',
     order: 5
+  },
+  {
+    id: 'prescriptions',
+    title: 'Prescriptions',
+    icon: '💊',
+    path: '/prescriptions',
+    badge: 12,
+    order: 6
+  },
+  {
+    id: 'medicine',
+    title: 'Medicine',
+    icon: '💉',
+    path: '/medicine',
+    order: 7
+  },
+  {
+    id: 'profile',
+    title: 'Profile',
+    icon: '👤',
+    path: '/profile',
+    order: 8
   },
   {
     id: 'settings',
     title: 'Settings',
     icon: '⚙️',
     path: '/settings',
-    order: 6
+    order: 9
   }
 ];
 
@@ -71,21 +91,15 @@ class SidebarService {
   private cacheExpiry: number = 5 * 60 * 1000; // 5 minutes
   private lastFetch: number = 0;
 
-  /**
-   * Fetch sidebar configuration from backend
-   */
   async fetchSidebarConfig(): Promise<SidebarConfig> {
     try {
-      // Check if we have valid cached data
       if (this.cache && Date.now() - this.lastFetch < this.cacheExpiry) {
         return this.cache;
       }
 
-      // Try to fetch from backend (using mock API for development)
       try {
         const data = await mockSidebarApi.getSidebarConfig();
         
-        // Validate the response structure
         if (this.validateSidebarConfig(data)) {
           this.cache = {
             menuItems: data.menuItems || [],
@@ -96,7 +110,6 @@ class SidebarService {
           return this.cache;
         }
       } catch (apiError) {
-        // Fallback to real API if mock fails
         const response = await fetch('/api/sidebar/config', {
           method: 'GET',
           headers: {
@@ -108,7 +121,6 @@ class SidebarService {
         if (response.ok) {
           const data = await response.json();
           
-          // Validate the response structure
           if (this.validateSidebarConfig(data)) {
             this.cache = {
               menuItems: data.menuItems || [],
@@ -128,9 +140,6 @@ class SidebarService {
     }
   }
 
-  /**
-   * Get default sidebar configuration
-   */
   getDefaultConfig(): SidebarConfig {
     return {
       menuItems: DEFAULT_MENU_ITEMS,
@@ -139,9 +148,6 @@ class SidebarService {
     };
   }
 
-  /**
-   * Validate sidebar configuration from backend
-   */
   private validateSidebarConfig(data: any): boolean {
     if (!data || typeof data !== 'object') return false;
     
@@ -157,17 +163,12 @@ class SidebarService {
     return true;
   }
 
-  /**
-   * Filter menu items based on user permissions
-   */
   filterMenuItemsByPermissions(menuItems: SidebarMenuItem[], userPermissions: string[]): SidebarMenuItem[] {
     return menuItems.filter(item => {
-      // If no permissions required, show the item
       if (!item.permissions || item.permissions.length === 0) {
         return true;
       }
       
-      // Check if user has any of the required permissions
       return item.permissions.some(permission => 
         userPermissions.includes(permission)
       );
@@ -177,9 +178,6 @@ class SidebarService {
     }));
   }
 
-  /**
-   * Sort menu items by order
-   */
   sortMenuItems(menuItems: SidebarMenuItem[]): SidebarMenuItem[] {
     return menuItems
       .sort((a, b) => (a.order || 999) - (b.order || 999))
@@ -189,20 +187,15 @@ class SidebarService {
       }));
   }
 
-  /**
-   * Get processed sidebar menu items
-   */
   async getMenuItems(): Promise<SidebarMenuItem[]> {
     try {
       const config = await this.fetchSidebarConfig();
       let menuItems = config.menuItems;
 
-      // Filter by permissions if user permissions are available
       if (config.userPermissions.length > 0) {
         menuItems = this.filterMenuItemsByPermissions(menuItems, config.userPermissions);
       }
 
-      // Sort by order
       menuItems = this.sortMenuItems(menuItems);
 
       return menuItems;
@@ -211,23 +204,16 @@ class SidebarService {
     }
   }
 
-  /**
-   * Clear cache (useful for logout or permission changes)
-   */
   clearCache(): void {
     this.cache = null;
     this.lastFetch = 0;
   }
 
-  /**
-   * Force refresh sidebar config
-   */
   async refreshConfig(): Promise<SidebarConfig> {
     this.clearCache();
     return this.fetchSidebarConfig();
   }
 }
 
-// Export singleton instance
 export const sidebarService = new SidebarService();
 export default sidebarService;

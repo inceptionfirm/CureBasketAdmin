@@ -1,4 +1,3 @@
-// Dashboard Service for fetching data from backend
 export interface OrderTargetData {
   achieved: number;
   target: number;
@@ -26,32 +25,21 @@ class DashboardService {
   private baseUrl: string;
 
   constructor() {
-    // Use environment variable or default to localhost
     this.baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
   }
 
-  // Fetch order target completion data
   async getOrderTargetData(period: string = 'August'): Promise<OrderTargetData> {
-    // Use mock data for now since backend is not available
-    console.log('Using mock data for order target data');
     return this.getMockOrderTargetData(period);
   }
 
-  // Fetch dashboard metrics
   async getDashboardMetrics(period: string = '7 days'): Promise<DashboardMetrics> {
-    // Use mock data for now since backend is not available
-    console.log('Using mock data for dashboard metrics');
     return this.getMockDashboardMetrics(period);
   }
 
-  // Fetch order history
   async getOrderHistory(fromDate?: string, toDate?: string): Promise<OrderHistoryItem[]> {
-    // Use mock data for now since backend is not available
-    console.log('Using mock data for order history');
     return this.getMockOrderHistory();
   }
 
-  // Mock data for development
   private getMockOrderTargetData(period: string): OrderTargetData {
     const mockData: Record<string, OrderTargetData> = {
       'August': { achieved: 46732, target: 50000, period: 'August', lastUpdated: new Date().toISOString() },
@@ -83,7 +71,6 @@ class DashboardService {
     ];
   }
 
-  // Update order target (for admin functionality)
   async updateOrderTarget(period: string, target: number): Promise<OrderTargetData> {
     try {
       const response = await fetch(`${this.baseUrl}/dashboard/order-target`, {

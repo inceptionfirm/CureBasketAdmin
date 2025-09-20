@@ -19,79 +19,82 @@ const MOCK_SIDEBAR_DATA: MockSidebarResponse = {
       permissions: ['dashboard:read']
     } as SidebarMenuItem,
     {
-      id: 'orders',
-      title: 'Orders',
-      icon: '📦',
-      path: '/orders',
-      badge: 12,
-      order: 2,
-      permissions: ['orders:read']
-    } as SidebarMenuItem,
-    {
-      id: 'products',
-      title: 'Products',
-      icon: '🛍️',
-      path: '/products',
-      order: 3,
-      permissions: ['products:read'],
-      children: [
-        {
-          id: 'products-list',
-          title: 'All Products',
-          icon: '📋',
-          path: '/products/list'
-        } as SidebarMenuItem,
-        {
-          id: 'products-add',
-          title: 'Add Product',
-          icon: '➕',
-          path: '/products/add'
-        } as SidebarMenuItem
-      ]
-    } as SidebarMenuItem,
-    {
-      id: 'customers',
-      title: 'Customers',
+      id: 'users',
+      title: 'Users',
       icon: '👥',
-      path: '/customers',
+      path: '/users',
       badge: 5,
-      order: 4,
-      permissions: ['customers:read']
+      order: 2,
+      permissions: ['users:read']
     } as SidebarMenuItem,
     {
-      id: 'analytics',
-      title: 'Analytics',
-      icon: '📈',
-      path: '/analytics',
+      id: 'categories',
+      title: 'Categories',
+      icon: '📂',
+      path: '/categories',
+      order: 3,
+      permissions: ['categories:read']
+    } as SidebarMenuItem,
+    {
+      id: 'blogs',
+      title: 'Blogs',
+      icon: '📝',
+      path: '/blogs',
+      order: 4,
+      permissions: ['blogs:read']
+    } as SidebarMenuItem,
+    {
+      id: 'banner-management',
+      title: 'Banner Management',
+      icon: '🖼️',
+      path: '/banner-management',
       order: 5,
-      permissions: ['analytics:read']
+      permissions: ['banners:read']
+    } as SidebarMenuItem,
+    {
+      id: 'prescriptions',
+      title: 'Prescriptions',
+      icon: '💊',
+      path: '/prescriptions',
+      badge: 12,
+      order: 6,
+      permissions: ['prescriptions:read']
+    } as SidebarMenuItem,
+    {
+      id: 'medicine',
+      title: 'Medicine',
+      icon: '💉',
+      path: '/medicine',
+      order: 7,
+      permissions: ['medicine:read']
+    } as SidebarMenuItem,
+    {
+      id: 'profile',
+      title: 'Profile',
+      icon: '👤',
+      path: '/profile',
+      order: 8,
+      permissions: ['profile:read']
     } as SidebarMenuItem,
     {
       id: 'settings',
       title: 'Settings',
       icon: '⚙️',
       path: '/settings',
-      order: 6,
+      order: 9,
       permissions: ['settings:read']
-    } as SidebarMenuItem,
-    {
-      id: 'reports',
-      title: 'Reports',
-      icon: '📊',
-      path: '/reports',
-      badge: 'NEW',
-      order: 7,
-      permissions: ['reports:read']
     } as SidebarMenuItem
   ],
   userPermissions: [
     'dashboard:read',
-    'orders:read',
-    'products:read',
-    'customers:read',
-    'analytics:read',
-    'settings:read',
-    'reports:read'
+    'users:read',
+    'categories:read',
+    'blogs:read',
+    'banners:read',
+    'prescriptions:read',
+    'medicine:read',
+    'profile:read',
+    'settings:read'
   ],
   lastUpdated: new Date().toISOString()
 };

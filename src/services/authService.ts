@@ -1,6 +1,3 @@
-// Authentication Service for handling login/logout with localStorage caching
-// This service manages user authentication state and credentials
-
 import { User, AuthData, LoginResponse, RegisterData, RegisterResponse } from '../types';
 
 class AuthService {
@@ -14,7 +11,6 @@ class AuthService {
     this.tokenKey = 'flycanary_token';
   }
 
-  // Mock users for development - replace with actual API calls
   private mockUsers: User[] = [
     {
       id: 1,
@@ -42,13 +38,10 @@ class AuthService {
     }
   ];
 
-  // Login user with email and password
   async login(email: string, password: string): Promise<LoginResponse> {
     try {
-      // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Find user in mock data
       const user = this.mockUsers.find(u => 
         u.email.toLowerCase() === email.toLowerCase() && u.password === password
       );
@@ -57,10 +50,8 @@ class AuthService {
         throw new Error('Invalid email or password');
       }
 
-      // Generate mock token
       const token = this.generateToken(user);
       
-      // Store in localStorage
       const authData = {
         isAuthenticated: true,
         token,
@@ -89,7 +80,6 @@ class AuthService {
     }
   }
 
-  // Logout user
   logout(): { success: boolean } {
     try {
       localStorage.removeItem(this.storageKey);
@@ -102,7 +92,6 @@ class AuthService {
     }
   }
 
-  // Check if user is authenticated
   isAuthenticated(): boolean {
     try {
       const authData = localStorage.getItem(this.storageKey);
@@ -121,7 +110,6 @@ class AuthService {
     }
   }
 
-  // Get current user data
   getCurrentUser(): User | null {
     try {
       const userData = localStorage.getItem(this.userKey);
@@ -134,7 +122,6 @@ class AuthService {
     }
   }
 
-  // Get auth token
   getToken(): string | null {
     try {
       return localStorage.getItem(this.tokenKey);
@@ -144,7 +131,6 @@ class AuthService {
     }
   }
 
-  // Generate mock JWT token
   private generateToken(user: User): string {
     const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
     const payload = btoa(JSON.stringify({
@@ -159,7 +145,6 @@ class AuthService {
     return `${header}.${payload}.${signature}`;
   }
 
-  // Validate token (basic check)
   private isTokenValid(token: string): boolean {
     if (!token) return false;
     
@@ -176,13 +161,10 @@ class AuthService {
     }
   }
 
-  // Register new user (for future use)
   async register(userData: RegisterData): Promise<RegisterResponse> {
     try {
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Check if user already exists
       const existingUser = this.mockUsers.find(u => 
         u.email.toLowerCase() === userData.email.toLowerCase()
       );
@@ -191,7 +173,6 @@ class AuthService {
         throw new Error('User already exists with this email');
       }
 
-      // Create new user
       const newUser = {
         id: this.mockUsers.length + 1,
         ...userData,
@@ -211,7 +192,6 @@ class AuthService {
     }
   }
 
-  // Clear all auth data
   clearAuthData(): void {
     try {
       localStorage.removeItem(this.storageKey);

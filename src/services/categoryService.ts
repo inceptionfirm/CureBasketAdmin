@@ -1,24 +1,14 @@
-// Category Service for handling backend API calls
-// Using mock data since backend is not available
-
 import { Category } from '../types';
 
 class CategoryService {
-  // Fetch all categories with their active status
   async getCategories(): Promise<Category[]> {
-    // Use mock data for now since backend is not available
-    console.log('Using mock data for categories');
     return this.getMockCategories();
   }
 
-  // Toggle element active status
   async toggleElementStatus(categoryId: number, elementId: number, isActive: boolean): Promise<{ success: boolean }> {
-    // Simulate success for development since backend is not available
-    console.log('Simulating element toggle for development');
     return { success: true };
   }
 
-  // Mock data for development
   private getMockCategories(): Category[] {
     return [
       {
