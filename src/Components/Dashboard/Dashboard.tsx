@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useDashboard } from '../../contexts/DashboardContext';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useLocale } from '../../contexts/LocaleContext';
+import { useError, useLoading } from '../../hooks/useErrorHandling';
+import { createEnhancedService } from '../../services/dynamicService';
+import { apiConfigManager } from '../../config/apiConfig';
 import CategoryCard from './CategoryCard';
 import ProgressChart from './ProgressChart';
 import LineChart from './LineChart';
 import DonutChart from './DonutChart';
 import LocaleDemo from './LocaleDemo';
 import CurrencyDemo from './CurrencyDemo';
-import categoryService from '../../services/categoryService';
-import dashboardService from '../../services/dashboardService';
 import { Category } from '../../types';
 import './Dashboard.css';
 
@@ -17,9 +18,10 @@ const Dashboard: React.FC = () => {
   const { config: dashboardConfig } = useDashboard();
   const { config: appConfig } = useConfig();
   const { formatCurrency, formatDate, formatNumber, t } = useLocale();
+  const { addError } = useError();
+  const { setLoading, isLoading } = useLoading();
+  
   const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('August');
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('7 days');
   const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
@@ -34,6 +36,19 @@ const Dashboard: React.FC = () => {
     }>;
   } | null>(null);
 
+  // Create dynamic services
+  const categoryService = createEnhancedService<Category>(
+    { endpoint: '/api/categories' },
+    (error) => addError(error),
+    (loading) => setLoading('categories', loading)
+  );
+
+  const dashboardService = createEnhancedService<any>(
+    { endpoint: '/api/dashboard' },
+    (error) => addError(error),
+    (loading) => setLoading('dashboard', loading)
+  );
+
   // Real-time date/time update
   useEffect(() => {
     const timer = setInterval(() => {
@@ -45,18 +60,62 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      setLoading(true);
-      setError(null);
       try {
-        // Fetch all dashboard data in parallel
+        // Mock data for now - replace with actual API calls later
+        const mockCategories = [
+          {
+            id: 1,
+            name: 'Medicines',
+            isActive: true,
+            elements: [
+              { id: 1, name: 'Prescription Drugs', isActive: true },
+              { id: 2, name: 'Over-the-Counter', isActive: true },
+              { id: 3, name: 'Vitamins', isActive: false }
+            ]
+          },
+          {
+            id: 2,
+            name: 'Health Products',
+            isActive: true,
+            elements: [
+              { id: 4, name: 'Medical Devices', isActive: true },
+              { id: 5, name: 'Health Supplements', isActive: true }
+            ]
+          },
+          {
+            id: 3,
+            name: 'Personal Care',
+            isActive: true,
+            elements: [
+              { id: 6, name: 'Skincare', isActive: true },
+              { id: 7, name: 'Hair Care', isActive: false }
+            ]
+          }
+        ];
+
+        const mockMetrics = {
+          totalOrders: 1247,
+          totalBuyers: 892,
+          totalRevenue: 45678.90
+        };
+
+        const mockOrderHistory = [
+          { id: '1', status: 'completed', date: '2024-01-20' },
+          { id: '2', status: 'pending', date: '2024-01-19' },
+          { id: '3', status: 'completed', date: '2024-01-18' },
+          { id: '4', status: 'processing', date: '2024-01-17' },
+          { id: '5', status: 'completed', date: '2024-01-16' }
+        ];
+        
+        // Use dynamic service to fetch data (will use mock data if API not available)
         const [categoriesResponse, metricsResponse, orderHistoryResponse] = await Promise.all([
-          categoryService.getCategories(),
-          dashboardService.getDashboardMetrics(selectedTimeframe),
-          dashboardService.getOrderHistory()
+          categoryService.getListWithLoading({}, mockCategories),
+          dashboardService.customRequest('GET', '/metrics', { timeframe: selectedTimeframe }, mockMetrics),
+          dashboardService.customRequest('GET', '/orders', {}, mockOrderHistory)
         ]);
         
         // Filter only active categories with active elements
-        const activeCategories = categoriesResponse.filter(category => 
+        const activeCategories = categoriesResponse.items.filter(category => 
           category.isActive && 
           category.elements.some(element => element.isActive)
         );
@@ -77,14 +136,15 @@ const Dashboard: React.FC = () => {
         
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
-        setError('Failed to load dashboard data. Please try again.');
-      } finally {
-        setLoading(false);
+        addError({
+          message: 'Failed to load dashboard data. Please try again.',
+          context: 'Dashboard'
+        });
       }
     };
 
     fetchDashboardData();
-  }, [selectedTimeframe]);
+  }, [selectedTimeframe, categoryService, dashboardService, addError, formatCurrency]);
 
   const handleElementToggle = async (categoryId: number, elementId: number) => {
     try {
@@ -98,8 +158,13 @@ const Dashboard: React.FC = () => {
       // Toggle the element status
       const newStatus = !element.isActive;
       
-      // Update backend
-      await categoryService.toggleElementStatus(categoryId, elementId, newStatus);
+      // Use dynamic service to toggle element status
+      await categoryService.customRequest(
+        'PUT', 
+        `/${categoryId}/elements/${elementId}/toggle`, 
+        { isActive: newStatus },
+        { success: true }
+      );
       
       // Update local state
       setCategories(prevCategories => 
@@ -120,30 +185,18 @@ const Dashboard: React.FC = () => {
       );
     } catch (error) {
       console.error('Error toggling element:', error);
-      setError('Failed to update element status. Please try again.');
+      addError({
+        message: 'Failed to update element status. Please try again.',
+        context: 'Dashboard'
+      });
     }
   };
 
-  if (loading) {
+  if (isLoading('dashboard') || isLoading('categories')) {
     return (
       <div className="dashboard-loading">
         <div className="loading-spinner"></div>
         <p>Loading dashboard...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="dashboard-error">
-        <h3>Error</h3>
-        <p>{error}</p>
-        <button 
-          onClick={() => window.location.reload()}
-          className="retry-button"
-        >
-          Retry
-        </button>
       </div>
     );
   }

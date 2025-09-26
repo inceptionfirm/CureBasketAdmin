@@ -16,6 +16,7 @@ import Categories from './Components/Categories/Categories';
 import Blogs from './Components/Blogs/Blogs';
 import BannerManagement from './Components/BannerManagement/BannerManagement';
 import Prescriptions from './Components/Prescriptions/Prescriptions';
+import MedicinePage from './Components/Medicine/MedicinePage';
 import GlobalThemeWrapper from './Components/GlobalThemeWrapper';
 import './App.css';
 import './styles/dynamic.css';
@@ -100,7 +101,7 @@ function AdminLayout(): React.JSX.Element {
           <Route path="/blogs" element={<Blogs />} />
           <Route path="/banner-management" element={<BannerManagement />} />
           <Route path="/prescriptions" element={<Prescriptions />} />
-          <Route path="/medicine" element={<div className="admin-main"><h1>Medicine Management</h1><p>Medicine page content will be here</p></div>} />
+          <Route path="/medicine" element={<MedicinePage />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
