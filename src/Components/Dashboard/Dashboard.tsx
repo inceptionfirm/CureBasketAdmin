@@ -1,55 +1,67 @@
 import React, { useState, useEffect } from 'react';
-import { useDashboard } from '../../contexts/DashboardContext';
-import { useConfig } from '../../contexts/ConfigContext';
 import { useLocale } from '../../contexts/LocaleContext';
-import { useError, useLoading } from '../../hooks/useErrorHandling';
-import { createEnhancedService } from '../../services/dynamicService';
-import { apiConfigManager } from '../../config/apiConfig';
-import CategoryCard from './CategoryCard';
-import ProgressChart from './ProgressChart';
-import LineChart from './LineChart';
-import DonutChart from './DonutChart';
 import LocaleDemo from './LocaleDemo';
 import CurrencyDemo from './CurrencyDemo';
 import { Category } from '../../types';
 import './Dashboard.css';
 
 const Dashboard: React.FC = () => {
-  const { config: dashboardConfig } = useDashboard();
-  const { config: appConfig } = useConfig();
   const { formatCurrency, formatDate, formatNumber, t } = useLocale();
-  const { addError } = useError();
-  const { setLoading, isLoading } = useLoading();
   
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('August');
-  const [selectedTimeframe, setSelectedTimeframe] = useState<string>('7 days');
   const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
-  const [dashboardData, setDashboardData] = useState<{
-    ordersCompleted: number;
-    buyers: number;
-    revenue: string;
-    orderHistory: Array<{
-      id: string;
-      status: string;
-      date: string;
-    }>;
-  } | null>(null);
+  
+  // Static data - no API calls, no services, no complex state management
+  const categories: Category[] = [
+    {
+      id: 1,
+      name: 'Medicines',
+      color: '#10b981',
+      icon: '💊',
+      isActive: true,
+      elements: [
+        { id: 1, name: 'Prescription Drugs', isActive: true },
+        { id: 2, name: 'Over-the-Counter', isActive: true },
+        { id: 3, name: 'Vitamins', isActive: false }
+      ]
+    },
+    {
+      id: 2,
+      name: 'Health Products',
+      color: '#3b82f6',
+      icon: '🏥',
+      isActive: true,
+      elements: [
+        { id: 4, name: 'Medical Devices', isActive: true },
+        { id: 5, name: 'Health Supplements', isActive: true }
+      ]
+    },
+    {
+      id: 3,
+      name: 'Personal Care',
+      color: '#f59e0b',
+      icon: '🧴',
+      isActive: true,
+      elements: [
+        { id: 6, name: 'Skincare', isActive: true },
+        { id: 7, name: 'Hair Care', isActive: false }
+      ]
+    }
+  ];
 
-  // Create dynamic services
-  const categoryService = createEnhancedService<Category>(
-    { endpoint: '/api/categories' },
-    (error) => addError(error),
-    (loading) => setLoading('categories', loading)
-  );
+  const dashboardData = {
+    ordersCompleted: 1247,
+    buyers: 892,
+    revenue: 45678.90,
+    orderHistory: [
+      { id: '1', status: 'completed', date: '2024-01-20' },
+      { id: '2', status: 'pending', date: '2024-01-19' },
+      { id: '3', status: 'completed', date: '2024-01-18' },
+      { id: '4', status: 'processing', date: '2024-01-17' },
+      { id: '5', status: 'completed', date: '2024-01-16' }
+    ]
+  };
 
-  const dashboardService = createEnhancedService<any>(
-    { endpoint: '/api/dashboard' },
-    (error) => addError(error),
-    (loading) => setLoading('dashboard', loading)
-  );
-
-  // Real-time date/time update
+  // Simple real-time date/time update - no complex logic
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentDateTime(new Date());
@@ -58,170 +70,9 @@ const Dashboard: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        // Mock data for now - replace with actual API calls later
-        const mockCategories = [
-          {
-            id: 1,
-            name: 'Medicines',
-            isActive: true,
-            elements: [
-              { id: 1, name: 'Prescription Drugs', isActive: true },
-              { id: 2, name: 'Over-the-Counter', isActive: true },
-              { id: 3, name: 'Vitamins', isActive: false }
-            ]
-          },
-          {
-            id: 2,
-            name: 'Health Products',
-            isActive: true,
-            elements: [
-              { id: 4, name: 'Medical Devices', isActive: true },
-              { id: 5, name: 'Health Supplements', isActive: true }
-            ]
-          },
-          {
-            id: 3,
-            name: 'Personal Care',
-            isActive: true,
-            elements: [
-              { id: 6, name: 'Skincare', isActive: true },
-              { id: 7, name: 'Hair Care', isActive: false }
-            ]
-          }
-        ];
+  // No loading states needed - static data renders immediately
 
-        const mockMetrics = {
-          totalOrders: 1247,
-          totalBuyers: 892,
-          totalRevenue: 45678.90
-        };
-
-        const mockOrderHistory = [
-          { id: '1', status: 'completed', date: '2024-01-20' },
-          { id: '2', status: 'pending', date: '2024-01-19' },
-          { id: '3', status: 'completed', date: '2024-01-18' },
-          { id: '4', status: 'processing', date: '2024-01-17' },
-          { id: '5', status: 'completed', date: '2024-01-16' }
-        ];
-        
-        // Use dynamic service to fetch data (will use mock data if API not available)
-        const [categoriesResponse, metricsResponse, orderHistoryResponse] = await Promise.all([
-          categoryService.getListWithLoading({}, mockCategories),
-          dashboardService.customRequest('GET', '/metrics', { timeframe: selectedTimeframe }, mockMetrics),
-          dashboardService.customRequest('GET', '/orders', {}, mockOrderHistory)
-        ]);
-        
-        // Filter only active categories with active elements
-        const activeCategories = categoriesResponse.items.filter(category => 
-          category.isActive && 
-          category.elements.some(element => element.isActive)
-        );
-        
-        setCategories(activeCategories);
-        
-        // Set dashboard metrics
-        setDashboardData({
-          ordersCompleted: metricsResponse.totalOrders,
-          buyers: metricsResponse.totalBuyers,
-          revenue: formatCurrency(metricsResponse.totalRevenue),
-          orderHistory: orderHistoryResponse.map(order => ({
-            id: order.id,
-            status: order.status,
-            date: order.date
-          }))
-        });
-        
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        addError({
-          message: 'Failed to load dashboard data. Please try again.',
-          context: 'Dashboard'
-        });
-      }
-    };
-
-    fetchDashboardData();
-  }, [selectedTimeframe, categoryService, dashboardService, addError, formatCurrency]);
-
-  const handleElementToggle = async (categoryId: number, elementId: number) => {
-    try {
-      // Find the category and element to get current status
-      const category = categories.find(cat => cat.id === categoryId);
-      if (!category) return;
-      
-      const element = category.elements.find(el => el.id === elementId);
-      if (!element) return;
-      
-      // Toggle the element status
-      const newStatus = !element.isActive;
-      
-      // Use dynamic service to toggle element status
-      await categoryService.customRequest(
-        'PUT', 
-        `/${categoryId}/elements/${elementId}/toggle`, 
-        { isActive: newStatus },
-        { success: true }
-      );
-      
-      // Update local state
-      setCategories(prevCategories => 
-        prevCategories.map(cat => 
-          cat.id === categoryId 
-            ? {
-                ...cat,
-                elements: cat.elements.map(el => 
-                  el.id === elementId 
-                    ? { ...el, isActive: newStatus }
-                    : el
-                )
-              }
-            : cat
-        ).filter(cat => 
-          cat.isActive && cat.elements.some(el => el.isActive)
-        )
-      );
-    } catch (error) {
-      console.error('Error toggling element:', error);
-      addError({
-        message: 'Failed to update element status. Please try again.',
-        context: 'Dashboard'
-      });
-    }
-  };
-
-  if (isLoading('dashboard') || isLoading('categories')) {
-    return (
-      <div className="dashboard-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading dashboard...</p>
-      </div>
-    );
-  }
-
-  // Sample data for charts
-  const progressData = [
-    { title: 'System Performance', value: 87, max: 100, color: '#10b981' },
-    { title: 'User Engagement', value: 72, max: 100, color: '#3b82f6' },
-    { title: 'Task Completion', value: 94, max: 100, color: '#f59e0b' },
-    { title: 'Revenue Growth', value: 68, max: 100, color: '#8b5cf6' }
-  ];
-
-  const trendData = [
-    { x: 1, y: 45, label: 'Jan' },
-    { x: 2, y: 52, label: 'Feb' },
-    { x: 3, y: 48, label: 'Mar' },
-    { x: 4, y: 61, label: 'Apr' },
-    { x: 5, y: 55, label: 'May' },
-    { x: 6, y: 67, label: 'Jun' },
-    { x: 7, y: 72, label: 'Jul' }
-  ];
-
-  const activeElements = categories.reduce((total, cat) => 
-    total + cat.elements.filter(el => el.isActive).length, 0
-  );
+  // Static data is ready - no calculations needed
 
   return (
     <div className="dashboard-container">
@@ -295,15 +146,15 @@ const Dashboard: React.FC = () => {
       <div className="metrics-section">
         <div className="metrics-grid">
           <div className="metric-card">
-            <div className="metric-value">{dashboardData ? formatNumber(dashboardData.ordersCompleted) : '...'}</div>
+            <div className="metric-value">{formatNumber(dashboardData.ordersCompleted)}</div>
             <div className="metric-label">{t('dashboard.ordersCompleted')}</div>
           </div>
           <div className="metric-card">
-            <div className="metric-value">{dashboardData ? formatNumber(dashboardData.buyers) : '...'}</div>
+            <div className="metric-value">{formatNumber(dashboardData.buyers)}</div>
             <div className="metric-label">{t('dashboard.activeBuyers')}</div>
           </div>
           <div className="metric-card">
-            <div className="metric-value">{dashboardData ? dashboardData.revenue : '...'}</div>
+            <div className="metric-value">{formatCurrency(dashboardData.revenue)}</div>
             <div className="metric-label">{t('dashboard.totalRevenue')}</div>
           </div>
           <div className="metric-card">
@@ -436,27 +287,19 @@ const Dashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {dashboardData ? (
-                    dashboardData.orderHistory.map((order, index) => (
-                      <tr key={index}>
-                        <td className="order-id">#{order.id}</td>
-                        <td className="customer">John Doe</td>
-                        <td>
-                          <span className={`status-badge ${order.status.toLowerCase()}`}>
-                            {order.status}
-                          </span>
-                        </td>
-                        <td className="amount">{formatCurrency(1234)}</td>
-                        <td className="date">{order.date}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="loading-cell">
-                        Loading recent orders...
+                  {dashboardData.orderHistory.map((order, index) => (
+                    <tr key={index}>
+                      <td className="order-id">#{order.id}</td>
+                      <td className="customer">John Doe</td>
+                      <td>
+                        <span className={`status-badge ${order.status.toLowerCase()}`}>
+                          {order.status}
+                        </span>
                       </td>
+                      <td className="amount">{formatCurrency(1234)}</td>
+                      <td className="date">{order.date}</td>
                     </tr>
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>

@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocale } from '../../contexts/LocaleContext';
-import { useError, useLoading } from '../../hooks/useErrorHandling';
-import { createEnhancedService } from '../../services/dynamicService';
-import { User, UserListParams, UserStats } from '../../services/userService';
+import { User, UserStats } from '../../services/userService';
 import AddUserModal from './AddUserModal';
 import DataTable, { TableColumn } from '../core/DataTable';
 import './Users.css';
@@ -28,8 +26,6 @@ interface UserFormData {
 
 const Users: React.FC = () => {
   const { t, formatNumber } = useLocale();
-  const { addError } = useError();
-  const { setLoading: setGlobalLoading, isLoading } = useLoading();
   
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
@@ -47,16 +43,11 @@ const Users: React.FC = () => {
     pageSize: 10,
     total: 0,
   });
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
 
-  // Create dynamic user service
-  const dynamicUserService = createEnhancedService<User>(
-    { endpoint: '/api/users' },
-    (error) => addError(error),
-    (loading) => setGlobalLoading('users', loading)
-  );
+  // Use static data for now - no complex service layer needed
 
   // Debounce search term
   useEffect(() => {
@@ -66,12 +57,12 @@ const Users: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const loadUsers = useCallback(async (params: UserListParams = {}) => {
+  const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Mock data for development - will be replaced with real API when available
+      // Static data for development - no API calls needed
       const mockUsers: User[] = [
         {
           id: '1',
@@ -85,7 +76,16 @@ const Users: React.FC = () => {
           profileImage: '',
           lastLogin: '2024-01-20T10:30:00Z',
           createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-20T10:30:00Z'
+          updatedAt: '2024-01-20T10:30:00Z',
+          dateOfBirth: '1990-01-01',
+          address: '123 Main St',
+          city: 'New York',
+          state: 'NY',
+          zipCode: '10001',
+          country: 'USA',
+          emergencyContact: 'Jane Doe',
+          emergencyPhone: '+1-555-0124',
+          notes: 'Admin user'
         },
         {
           id: '2',
@@ -99,7 +99,16 @@ const Users: React.FC = () => {
           profileImage: '',
           lastLogin: '2024-01-19T15:45:00Z',
           createdAt: '2024-01-02T00:00:00Z',
-          updatedAt: '2024-01-19T15:45:00Z'
+          updatedAt: '2024-01-19T15:45:00Z',
+          dateOfBirth: '1985-05-15',
+          address: '456 Oak Ave',
+          city: 'Los Angeles',
+          state: 'CA',
+          zipCode: '90210',
+          country: 'USA',
+          emergencyContact: 'John Smith',
+          emergencyPhone: '+1-555-0125',
+          notes: 'Sales manager'
         },
         {
           id: '3',
@@ -113,23 +122,34 @@ const Users: React.FC = () => {
           profileImage: '',
           lastLogin: '2024-01-15T09:20:00Z',
           createdAt: '2024-01-03T00:00:00Z',
-          updatedAt: '2024-01-15T09:20:00Z'
+          updatedAt: '2024-01-15T09:20:00Z',
+          dateOfBirth: '1992-12-10',
+          address: '789 Pine St',
+          city: 'Chicago',
+          state: 'IL',
+          zipCode: '60601',
+          country: 'USA',
+          emergencyContact: 'Mary Johnson',
+          emergencyPhone: '+1-555-0126',
+          notes: 'Marketing employee'
         }
       ];
 
-      // Use dynamic service to fetch users
-      const response = await dynamicUserService.getListWithLoading({
-        page: pagination.current,
-        pageSize: pagination.pageSize,
-        search: debouncedSearchTerm || undefined,
-        ...params,
-      }, mockUsers);
+      // Filter users based on search term
+      let filteredUsers = mockUsers;
+      if (debouncedSearchTerm) {
+        filteredUsers = mockUsers.filter(user => 
+          user.firstName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+          user.lastName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+          user.email.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+        );
+      }
 
-      setUsers(response.items);
+      setUsers(filteredUsers);
       setPagination(prev => ({
         ...prev,
-        total: response.pagination.total,
-        totalPages: response.pagination.totalPages
+        total: filteredUsers.length,
+        totalPages: Math.ceil(filteredUsers.length / prev.pageSize)
       }));
       
     } catch (err) {
@@ -137,11 +157,11 @@ const Users: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.current, pagination.pageSize, debouncedSearchTerm, dynamicUserService]);
+  }, [pagination.current, pagination.pageSize, debouncedSearchTerm]);
 
   const loadStats = useCallback(async () => {
     try {
-      // Mock stats for development
+      // Static stats for development
       const mockStats: UserStats = {
         totalUsers: 3,
         activeUsers: 2,
@@ -150,13 +170,11 @@ const Users: React.FC = () => {
         recentLogins: 2
       };
 
-      // Use dynamic service to fetch stats
-      const statsData = await dynamicUserService.getStats(mockStats);
-      setStats(statsData);
+      setStats(mockStats);
     } catch (err) {
       console.error('Failed to load user stats:', err);
     }
-  }, [dynamicUserService]);
+  }, []);
 
   useEffect(() => {
     loadUsers();
@@ -176,15 +194,28 @@ const Users: React.FC = () => {
         department: userData.department,
         status: userData.status,
         profileImage: '',
-        lastLogin: null,
+        lastLogin: undefined,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        dateOfBirth: userData.dateOfBirth,
+        address: userData.address,
+        city: userData.city,
+        state: userData.state,
+        zipCode: userData.zipCode,
+        country: userData.country,
+        emergencyContact: userData.emergencyContact,
+        emergencyPhone: userData.emergencyPhone,
+        notes: userData.notes
       };
 
-      // Use dynamic service to create user
-      await dynamicUserService.createWithLoading(userData as any, mockNewUser);
-      await loadUsers();
-      await loadStats();
+      // Add to local state (simulating API call)
+      setUsers(prev => [...prev, mockNewUser]);
+      setStats(prev => ({
+        ...prev,
+        totalUsers: prev.totalUsers + 1,
+        activeUsers: userData.status === 'active' ? prev.activeUsers + 1 : prev.activeUsers
+      }));
+      
       alert(`User ${userData.firstName} ${userData.lastName} has been added successfully!`);
     } catch (err) {
       alert(`Failed to add user: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -211,9 +242,12 @@ const Users: React.FC = () => {
   const handleDeleteUser = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
-        await userService.deleteUser(id);
-        await loadUsers();
-        await loadStats();
+        // Remove from local state (simulating API call)
+        setUsers(prev => prev.filter(user => user.id !== id));
+        setStats(prev => ({
+          ...prev,
+          totalUsers: prev.totalUsers - 1
+        }));
       } catch (err) {
         alert(`Failed to delete user: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
@@ -225,9 +259,13 @@ const Users: React.FC = () => {
     
     if (window.confirm(`Are you sure you want to delete ${selectedUsers.length} users?`)) {
       try {
-        await userService.bulkDeleteUsers(selectedUsers.map(u => u.id));
-        await loadUsers();
-        await loadStats();
+        // Remove from local state (simulating API call)
+        const selectedIds = selectedUsers.map(u => u.id);
+        setUsers(prev => prev.filter(user => !selectedIds.includes(user.id)));
+        setStats(prev => ({
+          ...prev,
+          totalUsers: prev.totalUsers - selectedUsers.length
+        }));
         setSelectedUsers([]);
       } catch (err) {
         alert(`Failed to delete users: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -239,9 +277,23 @@ const Users: React.FC = () => {
     if (selectedUsers.length === 0) return;
     
     try {
-      await userService.bulkUpdateUsers(selectedUsers.map(u => u.id), { status });
-      await loadUsers();
-      await loadStats();
+      // Update local state (simulating API call)
+      const selectedIds = selectedUsers.map(u => u.id);
+      setUsers(prev => prev.map(user => 
+        selectedIds.includes(user.id) ? { ...user, status } : user
+      ));
+      
+      // Update stats
+      const currentActiveCount = users.filter(u => u.status === 'active').length;
+      const newActiveCount = status === 'active' 
+        ? currentActiveCount + selectedUsers.length
+        : currentActiveCount - selectedUsers.length;
+        
+      setStats(prev => ({
+        ...prev,
+        activeUsers: Math.max(0, newActiveCount)
+      }));
+      
       setSelectedUsers([]);
     } catch (err) {
       alert(`Failed to update users: ${err instanceof Error ? err.message : 'Unknown error'}`);
