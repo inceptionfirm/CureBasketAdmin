@@ -1,475 +1,716 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import './AddUserModal.css';
+import { BusinessPayload } from '../../services/businessService';
 
 interface AddUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (userData: UserFormData) => void;
+  onSubmit: (payload: BusinessPayload) => Promise<void>;
 }
 
-interface UserFormData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  role: string;
-  department: string;
-  status: 'active' | 'inactive';
-  dateOfBirth: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  country: string;
-  emergencyContact: string;
-  emergencyPhone: string;
-  notes: string;
-}
+type FormErrors = Record<string, string>;
 
-const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onSubmit }) => {
-  const [formData, setFormData] = useState<UserFormData>({
+const defaultFormState: BusinessPayload = {
+  name: '',
+  tagline: '',
+  description: '',
+  isCategoryEnabled: true,
+  isSupplier: false,
+  isSeller: true,
+  isActive: true,
+  isDeleted: false,
+  isVerified: false,
+  uniqueId: '',
+  domainName: '',
+  password: '',
+  address: {
     firstName: '',
     lastName: '',
-    email: '',
-    phone: '',
-    role: '',
-    department: '',
-    status: 'active',
-    dateOfBirth: '',
-    address: '',
+    addressLine1: '',
+    addressLine2: '',
     city: '',
     state: '',
-    zipCode: '',
+    postalCode: '',
     country: '',
-    emergencyContact: '',
-    emergencyPhone: '',
-    notes: ''
+    emailAddress: '',
+    phoneNumber: '',
+  },
+  contact: {
+    email: '',
+    mainPhone: '',
+    secondaryPhone: '',
+    isEmailVerified: false,
+    isMainPhoneVerified: false,
+  },
+};
+
+const createDefaultFormState = (): BusinessPayload => ({
+  ...defaultFormState,
+  address: { ...defaultFormState.address },
+  contact: { ...defaultFormState.contact },
   });
 
-  const [errors, setErrors] = useState<Partial<UserFormData>>({});
+const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState<BusinessPayload>(() => createDefaultFormState());
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [generalError, setGeneralError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Clear error when user starts typing
-    if (errors[name as keyof UserFormData]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: undefined
-      }));
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(createDefaultFormState());
+      setErrors({});
+      setGeneralError(null);
+      setIsSubmitting(false);
     }
+  }, [isOpen]);
+
+  const resetForm = () => {
+    setFormData(createDefaultFormState());
+    setErrors({});
+    setGeneralError(null);
+  };
+
+  const handleClose = () => {
+    if (isSubmitting) {
+      return;
+    }
+    resetForm();
+    onClose();
+  };
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = event.target;
+
+    setFormData(prev => {
+      if (name.startsWith('address.')) {
+        const key = name.replace('address.', '') as keyof BusinessPayload['address'];
+        return {
+          ...prev,
+          address: {
+            ...prev.address,
+            [key]: value,
+          },
+        };
+      }
+
+      if (name.startsWith('contact.')) {
+        const key = name.replace('contact.', '') as keyof BusinessPayload['contact'];
+        return {
+      ...prev,
+          contact: {
+            ...prev.contact,
+            [key]: value,
+          },
+        };
+      }
+
+      return {
+        ...prev,
+        [name]: value,
+      } as BusinessPayload;
+    });
+
+    setErrors(prev => {
+      if (!(name in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const handleCheckboxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = event.target;
+
+    setFormData(prev => {
+      if (name.startsWith('contact.')) {
+        const key = name.replace('contact.', '') as keyof BusinessPayload['contact'];
+        return {
+          ...prev,
+          contact: {
+            ...prev.contact,
+            [key]: checked,
+          },
+        };
+      }
+
+      return {
+        ...prev,
+        [name]: checked,
+      } as BusinessPayload;
+    });
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<UserFormData> = {};
+    const newErrors: FormErrors = {};
 
-    if (!formData.firstName.trim()) {
-      newErrors.firstName = 'First name is required';
+    if (!formData.name.trim()) {
+      newErrors.name = 'Business name is required';
     }
-
-    if (!formData.lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
+    if (!formData.uniqueId.trim()) {
+      newErrors.uniqueId = 'Unique ID is required';
     }
-
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+    if (!formData.domainName.trim()) {
+      newErrors.domainName = 'Domain name is required';
     }
-
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
+    if (!formData.password.trim()) {
+      newErrors.password = 'Password is required';
     }
-
-    if (!formData.role.trim()) {
-      newErrors.role = 'Role is required';
+    if (!formData.contact.email.trim()) {
+      newErrors['contact.email'] = 'Contact email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contact.email)) {
+      newErrors['contact.email'] = 'Enter a valid contact email';
     }
-
-    if (!formData.department.trim()) {
-      newErrors.department = 'Department is required';
+    if (!formData.contact.mainPhone.trim()) {
+      newErrors['contact.mainPhone'] = 'Main phone is required';
+    }
+    if (!formData.address.firstName.trim()) {
+      newErrors['address.firstName'] = 'First name is required';
+    }
+    if (!formData.address.lastName.trim()) {
+      newErrors['address.lastName'] = 'Last name is required';
+    }
+    if (!formData.address.emailAddress.trim()) {
+      newErrors['address.emailAddress'] = 'Address email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.address.emailAddress)) {
+      newErrors['address.emailAddress'] = 'Enter a valid email';
+    }
+    if (!formData.address.phoneNumber.trim()) {
+      newErrors['address.phoneNumber'] = 'Phone number is required';
+    }
+    if (!formData.address.addressLine1.trim()) {
+      newErrors['address.addressLine1'] = 'Address line 1 is required';
+    }
+    if (!formData.address.city.trim()) {
+      newErrors['address.city'] = 'City is required';
+    }
+    if (!formData.address.state.trim()) {
+      newErrors['address.state'] = 'State is required';
+    }
+    if (!formData.address.postalCode.trim()) {
+      newErrors['address.postalCode'] = 'Postal code is required';
+    }
+    if (!formData.address.country.trim()) {
+      newErrors['address.country'] = 'Country is required';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    console.log('📝 Form submitted, validating...');
     
     if (!validateForm()) {
+      console.warn('❌ Form validation failed');
       return;
     }
 
+    console.log('✅ Form validated, submitting...', formData);
     setIsSubmitting(true);
-    
+    setGeneralError(null);
+
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      onSubmit(formData);
-      handleClose();
+      console.log('🔄 Calling onSubmit callback...');
+      await onSubmit(formData);
+      console.log('✅ onSubmit completed successfully');
+      resetForm();
+      onClose();
     } catch (error) {
-      console.error('Error submitting form:', error);
+      console.error('❌ onSubmit failed:', error);
+      const message = error instanceof Error ? error.message : 'Failed to create business';
+      setGeneralError(message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleClose = () => {
-    setFormData({
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      role: '',
-      department: '',
-      status: 'active',
-      dateOfBirth: '',
-      address: '',
-      city: '',
-      state: '',
-      zipCode: '',
-      country: '',
-      emergencyContact: '',
-      emergencyPhone: '',
-      notes: ''
-    });
-    setErrors({});
-    onClose();
-  };
-
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-container" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">
-            <span className="modal-icon">👤</span>
-            Add New User
+            <span className="modal-icon">🏢</span>
+            Add New Business
           </h2>
-          <button className="modal-close-btn" onClick={handleClose}>
+          <button className="modal-close-btn" onClick={handleClose} aria-label="Close">
             ✕
           </button>
         </div>
 
         <form className="modal-form" onSubmit={handleSubmit}>
           <div className="form-sections">
-            {/* Personal Information Section */}
+            {generalError && (
+              <div className="error-message" style={{ marginBottom: '16px' }}>
+                {generalError}
+              </div>
+            )}
+
             <div className="form-section">
               <h3 className="section-title">
-                <span className="section-icon">👤</span>
-                Personal Information
+                <span className="section-icon">🏷️</span>
+                Business Details
               </h3>
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="firstName" className="form-label">
+                  <label htmlFor="name" className="form-label">
+                    Business Name <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    className={`form-input ${errors.name ? 'error' : ''}`}
+                    placeholder="Enter business name"
+                  />
+                  {errors.name && <span className="error-message">{errors.name}</span>}
+                </div>
+                <div className="form-group">
+                  <label htmlFor="uniqueId" className="form-label">
+                    Unique ID <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="uniqueId"
+                    name="uniqueId"
+                    value={formData.uniqueId}
+                    onChange={handleInputChange}
+                    className={`form-input ${errors.uniqueId ? 'error' : ''}`}
+                    placeholder="Enter unique identifier"
+                  />
+                  {errors.uniqueId && <span className="error-message">{errors.uniqueId}</span>}
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="domainName" className="form-label">
+                    Domain Name <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="domainName"
+                    name="domainName"
+                    value={formData.domainName}
+                    onChange={handleInputChange}
+                    className={`form-input ${errors.domainName ? 'error' : ''}`}
+                    placeholder="e.g. flycanary.store"
+                  />
+                  {errors.domainName && <span className="error-message">{errors.domainName}</span>}
+                </div>
+                <div className="form-group">
+                  <label htmlFor="password" className="form-label">
+                    Password <span className="required">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className={`form-input ${errors.password ? 'error' : ''}`}
+                    placeholder="Enter password"
+                  />
+                  {errors.password && <span className="error-message">{errors.password}</span>}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="tagline" className="form-label">
+                  Tagline
+                </label>
+                <input
+                  type="text"
+                  id="tagline"
+                  name="tagline"
+                  value={formData.tagline}
+                  onChange={handleInputChange}
+                  className="form-input"
+                  placeholder="Enter tagline"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="description" className="form-label">
+                  Description
+                </label>
+                <textarea
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  className="form-textarea"
+                  placeholder="Enter business description"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="form-section">
+              <h3 className="section-title">
+                <span className="section-icon">📞</span>
+                Contact Information
+              </h3>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="contact.email" className="form-label">
+                    Contact Email <span className="required">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    id="contact.email"
+                    name="contact.email"
+                    value={formData.contact.email}
+                    onChange={handleInputChange}
+                    className={`form-input ${errors['contact.email'] ? 'error' : ''}`}
+                    placeholder="Enter contact email"
+                  />
+                  {errors['contact.email'] && <span className="error-message">{errors['contact.email']}</span>}
+                </div>
+                <div className="form-group">
+                  <label htmlFor="contact.mainPhone" className="form-label">
+                    Main Phone <span className="required">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    id="contact.mainPhone"
+                    name="contact.mainPhone"
+                    value={formData.contact.mainPhone}
+                    onChange={handleInputChange}
+                    className={`form-input ${errors['contact.mainPhone'] ? 'error' : ''}`}
+                    placeholder="Enter main phone number"
+                  />
+                  {errors['contact.mainPhone'] && (
+                    <span className="error-message">{errors['contact.mainPhone']}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="contact.secondaryPhone" className="form-label">
+                    Secondary Phone
+                  </label>
+                  <input
+                    type="tel"
+                    id="contact.secondaryPhone"
+                    name="contact.secondaryPhone"
+                    value={formData.contact.secondaryPhone}
+                    onChange={handleInputChange}
+                    className="form-input"
+                    placeholder="Enter secondary phone number"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">
+                    <input
+                      type="checkbox"
+                      name="contact.isEmailVerified"
+                      checked={formData.contact.isEmailVerified}
+                      onChange={handleCheckboxChange}
+                    />
+                    Email Verified
+                  </label>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">
+                    <input
+                      type="checkbox"
+                      name="contact.isMainPhoneVerified"
+                      checked={formData.contact.isMainPhoneVerified}
+                      onChange={handleCheckboxChange}
+                    />
+                    Phone Verified
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="form-section">
+              <h3 className="section-title">
+                <span className="section-icon">📍</span>
+                Address Details
+              </h3>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="address.firstName" className="form-label">
                     First Name <span className="required">*</span>
                   </label>
                   <input
                     type="text"
-                    id="firstName"
-                    name="firstName"
-                    value={formData.firstName}
+                    id="address.firstName"
+                    name="address.firstName"
+                    value={formData.address.firstName}
                     onChange={handleInputChange}
-                    className={`form-input ${errors.firstName ? 'error' : ''}`}
+                    className={`form-input ${errors['address.firstName'] ? 'error' : ''}`}
                     placeholder="Enter first name"
                   />
-                  {errors.firstName && <span className="error-message">{errors.firstName}</span>}
+                  {errors['address.firstName'] && <span className="error-message">{errors['address.firstName']}</span>}
                 </div>
                 <div className="form-group">
-                  <label htmlFor="lastName" className="form-label">
+                  <label htmlFor="address.lastName" className="form-label">
                     Last Name <span className="required">*</span>
                   </label>
                   <input
                     type="text"
-                    id="lastName"
-                    name="lastName"
-                    value={formData.lastName}
+                    id="address.lastName"
+                    name="address.lastName"
+                    value={formData.address.lastName}
                     onChange={handleInputChange}
-                    className={`form-input ${errors.lastName ? 'error' : ''}`}
+                    className={`form-input ${errors['address.lastName'] ? 'error' : ''}`}
                     placeholder="Enter last name"
                   />
-                  {errors.lastName && <span className="error-message">{errors.lastName}</span>}
+                  {errors['address.lastName'] && <span className="error-message">{errors['address.lastName']}</span>}
                 </div>
               </div>
+
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="email" className="form-label">
+                  <label htmlFor="address.emailAddress" className="form-label">
                     Email Address <span className="required">*</span>
                   </label>
                   <input
                     type="email"
-                    id="email"
-                    name="email"
-                    value={formData.email}
+                    id="address.emailAddress"
+                    name="address.emailAddress"
+                    value={formData.address.emailAddress}
                     onChange={handleInputChange}
-                    className={`form-input ${errors.email ? 'error' : ''}`}
+                    className={`form-input ${errors['address.emailAddress'] ? 'error' : ''}`}
                     placeholder="Enter email address"
                   />
-                  {errors.email && <span className="error-message">{errors.email}</span>}
+                  {errors['address.emailAddress'] && (
+                    <span className="error-message">{errors['address.emailAddress']}</span>
+                  )}
                 </div>
                 <div className="form-group">
-                  <label htmlFor="phone" className="form-label">
+                  <label htmlFor="address.phoneNumber" className="form-label">
                     Phone Number <span className="required">*</span>
                   </label>
                   <input
                     type="tel"
-                    id="phone"
-                    name="phone"
-                    value={formData.phone}
+                    id="address.phoneNumber"
+                    name="address.phoneNumber"
+                    value={formData.address.phoneNumber}
                     onChange={handleInputChange}
-                    className={`form-input ${errors.phone ? 'error' : ''}`}
+                    className={`form-input ${errors['address.phoneNumber'] ? 'error' : ''}`}
                     placeholder="Enter phone number"
                   />
-                  {errors.phone && <span className="error-message">{errors.phone}</span>}
+                  {errors['address.phoneNumber'] && (
+                    <span className="error-message">{errors['address.phoneNumber']}</span>
+                  )}
                 </div>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="dateOfBirth" className="form-label">
-                    Date of Birth
-                  </label>
-                  <input
-                    type="date"
-                    id="dateOfBirth"
-                    name="dateOfBirth"
-                    value={formData.dateOfBirth}
-                    onChange={handleInputChange}
-                    className="form-input"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="status" className="form-label">
-                    Status
-                  </label>
-                  <select
-                    id="status"
-                    name="status"
-                    value={formData.status}
-                    onChange={handleInputChange}
-                    className="form-select"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
-            </div>
 
-            {/* Professional Information Section */}
-            <div className="form-section">
-              <h3 className="section-title">
-                <span className="section-icon">💼</span>
-                Professional Information
-              </h3>
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="role" className="form-label">
-                    Role <span className="required">*</span>
-                  </label>
-                  <select
-                    id="role"
-                    name="role"
-                    value={formData.role}
-                    onChange={handleInputChange}
-                    className={`form-select ${errors.role ? 'error' : ''}`}
-                  >
-                    <option value="">Select a role</option>
-                    <option value="admin">Administrator</option>
-                    <option value="manager">Manager</option>
-                    <option value="employee">Employee</option>
-                    <option value="intern">Intern</option>
-                    <option value="contractor">Contractor</option>
-                  </select>
-                  {errors.role && <span className="error-message">{errors.role}</span>}
-                </div>
-                <div className="form-group">
-                  <label htmlFor="department" className="form-label">
-                    Department <span className="required">*</span>
-                  </label>
-                  <select
-                    id="department"
-                    name="department"
-                    value={formData.department}
-                    onChange={handleInputChange}
-                    className={`form-select ${errors.department ? 'error' : ''}`}
-                  >
-                    <option value="">Select a department</option>
-                    <option value="engineering">Engineering</option>
-                    <option value="marketing">Marketing</option>
-                    <option value="sales">Sales</option>
-                    <option value="hr">Human Resources</option>
-                    <option value="finance">Finance</option>
-                    <option value="operations">Operations</option>
-                    <option value="support">Customer Support</option>
-                  </select>
-                  {errors.department && <span className="error-message">{errors.department}</span>}
-                </div>
-              </div>
-            </div>
-
-            {/* Address Information Section */}
-            <div className="form-section">
-              <h3 className="section-title">
-                <span className="section-icon">📍</span>
-                Address Information
-              </h3>
-              <div className="form-group">
-                <label htmlFor="address" className="form-label">
-                  Street Address
-                </label>
-                <input
-                  type="text"
-                  id="address"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  className="form-input"
-                  placeholder="Enter street address"
-                />
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="city" className="form-label">
-                    City
+                  <label htmlFor="address.addressLine1" className="form-label">
+                    Address Line 1 <span className="required">*</span>
                   </label>
                   <input
                     type="text"
-                    id="city"
-                    name="city"
-                    value={formData.city}
+                    id="address.addressLine1"
+                    name="address.addressLine1"
+                    value={formData.address.addressLine1}
+                    onChange={handleInputChange}
+                    className={`form-input ${errors['address.addressLine1'] ? 'error' : ''}`}
+                    placeholder="Building, street, area"
+                  />
+                  {errors['address.addressLine1'] && (
+                    <span className="error-message">{errors['address.addressLine1']}</span>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label htmlFor="address.addressLine2" className="form-label">
+                    Address Line 2
+                  </label>
+                  <input
+                    type="text"
+                    id="address.addressLine2"
+                    name="address.addressLine2"
+                    value={formData.address.addressLine2}
                     onChange={handleInputChange}
                     className="form-input"
+                    placeholder="Apartment, suite, etc."
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="address.city" className="form-label">
+                    City <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="address.city"
+                    name="address.city"
+                    value={formData.address.city}
+                    onChange={handleInputChange}
+                    className={`form-input ${errors['address.city'] ? 'error' : ''}`}
                     placeholder="Enter city"
                   />
+                  {errors['address.city'] && <span className="error-message">{errors['address.city']}</span>}
                 </div>
                 <div className="form-group">
-                  <label htmlFor="state" className="form-label">
-                    State/Province
+                  <label htmlFor="address.state" className="form-label">
+                    State <span className="required">*</span>
                   </label>
                   <input
                     type="text"
-                    id="state"
-                    name="state"
-                    value={formData.state}
+                    id="address.state"
+                    name="address.state"
+                    value={formData.address.state}
                     onChange={handleInputChange}
-                    className="form-input"
-                    placeholder="Enter state/province"
+                    className={`form-input ${errors['address.state'] ? 'error' : ''}`}
+                    placeholder="Enter state"
                   />
+                  {errors['address.state'] && <span className="error-message">{errors['address.state']}</span>}
                 </div>
               </div>
+
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="zipCode" className="form-label">
-                    ZIP/Postal Code
+                  <label htmlFor="address.postalCode" className="form-label">
+                    Postal Code <span className="required">*</span>
                   </label>
                   <input
                     type="text"
-                    id="zipCode"
-                    name="zipCode"
-                    value={formData.zipCode}
+                    id="address.postalCode"
+                    name="address.postalCode"
+                    value={formData.address.postalCode}
                     onChange={handleInputChange}
-                    className="form-input"
-                    placeholder="Enter ZIP/postal code"
+                    className={`form-input ${errors['address.postalCode'] ? 'error' : ''}`}
+                    placeholder="Enter postal code"
                   />
+                  {errors['address.postalCode'] && (
+                    <span className="error-message">{errors['address.postalCode']}</span>
+                  )}
                 </div>
                 <div className="form-group">
-                  <label htmlFor="country" className="form-label">
-                    Country
+                  <label htmlFor="address.country" className="form-label">
+                    Country <span className="required">*</span>
                   </label>
                   <input
                     type="text"
-                    id="country"
-                    name="country"
-                    value={formData.country}
+                    id="address.country"
+                    name="address.country"
+                    value={formData.address.country}
                     onChange={handleInputChange}
-                    className="form-input"
+                    className={`form-input ${errors['address.country'] ? 'error' : ''}`}
                     placeholder="Enter country"
                   />
+                  {errors['address.country'] && <span className="error-message">{errors['address.country']}</span>}
                 </div>
               </div>
             </div>
 
-            {/* Emergency Contact Section */}
             <div className="form-section">
               <h3 className="section-title">
-                <span className="section-icon">🚨</span>
-                Emergency Contact
+                <span className="section-icon">⚙️</span>
+                Features & Status
               </h3>
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="emergencyContact" className="form-label">
-                    Emergency Contact Name
+                  <label className="form-label">
+                    <input
+                      type="checkbox"
+                      name="isCategoryEnabled"
+                      checked={formData.isCategoryEnabled}
+                      onChange={handleCheckboxChange}
+                    />
+                    Categories Enabled
                   </label>
-                  <input
-                    type="text"
-                    id="emergencyContact"
-                    name="emergencyContact"
-                    value={formData.emergencyContact}
-                    onChange={handleInputChange}
-                    className="form-input"
-                    placeholder="Enter emergency contact name"
-                  />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="emergencyPhone" className="form-label">
-                    Emergency Contact Phone
+                  <label className="form-label">
+                    <input
+                      type="checkbox"
+                      name="isSupplier"
+                      checked={formData.isSupplier}
+                      onChange={handleCheckboxChange}
+                    />
+                    Supplier
                   </label>
-                  <input
-                    type="tel"
-                    id="emergencyPhone"
-                    name="emergencyPhone"
-                    value={formData.emergencyPhone}
-                    onChange={handleInputChange}
-                    className="form-input"
-                    placeholder="Enter emergency contact phone"
-                  />
                 </div>
               </div>
-            </div>
-
-            {/* Additional Notes Section */}
-            <div className="form-section">
-              <h3 className="section-title">
-                <span className="section-icon">📝</span>
-                Additional Notes
-              </h3>
-              <div className="form-group">
-                <label htmlFor="notes" className="form-label">
-                  Notes
-                </label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  className="form-textarea"
-                  placeholder="Enter any additional notes or comments"
-                  rows={4}
-                />
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">
+                    <input
+                      type="checkbox"
+                      name="isSeller"
+                      checked={formData.isSeller}
+                      onChange={handleCheckboxChange}
+                    />
+                    Seller
+                  </label>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">
+                    <input
+                      type="checkbox"
+                      name="isActive"
+                      checked={formData.isActive}
+                      onChange={handleCheckboxChange}
+                    />
+                    Active
+                  </label>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">
+                    <input
+                      type="checkbox"
+                      name="isVerified"
+                      checked={formData.isVerified}
+                      onChange={handleCheckboxChange}
+                    />
+                    Verified
+                  </label>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">
+                    <input
+                      type="checkbox"
+                      name="isDeleted"
+                      checked={formData.isDeleted}
+                      onChange={handleCheckboxChange}
+                    />
+                    Mark as Deleted
+                  </label>
+                </div>
               </div>
             </div>
           </div>
 
           <div className="modal-footer">
-            <button type="button" className="btn-secondary" onClick={handleClose}>
+            <button type="button" className="btn-secondary" onClick={handleClose} disabled={isSubmitting}>
               Cancel
             </button>
             <button type="submit" className="btn-primary" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
                   <span className="spinner"></span>
-                  Adding User...
+                  Creating...
                 </>
               ) : (
                 <>
                   <span className="btn-icon">➕</span>
-                  Add User
+                  Create Business
                 </>
               )}
             </button>

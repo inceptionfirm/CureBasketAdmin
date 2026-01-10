@@ -17,6 +17,10 @@ import Blogs from './Components/Blogs/Blogs';
 import BannerManagement from './Components/BannerManagement/BannerManagement';
 import Prescriptions from './Components/Prescriptions/Prescriptions';
 import MedicinePage from './Components/Medicine/MedicinePage';
+import Permissions from './Components/Permissions/Permissions';
+import PermissionGroups from './Components/PermissionGroups/PermissionGroups';
+import Roles from './Components/Roles/Roles';
+import Footer from './Components/Footer/Footer';
 import GlobalThemeWrapper from './Components/GlobalThemeWrapper';
 import './App.css';
 import './styles/dynamic.css';
@@ -102,11 +106,15 @@ function AdminLayout(): React.JSX.Element {
           <Route path="/banner-management" element={<BannerManagement />} />
           <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/medicine" element={<MedicinePage />} />
+          <Route path="/permissions" element={<Permissions />} />
+          <Route path="/permission-groups" element={<PermissionGroups />} />
+          <Route path="/roles" element={<Roles />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </div>
+      {/* <Footer sidebarOpen={sidebarOpen} /> */}
       {/* <ConfigManager /> */} {/* Commented out for now - will use in header later */}
     </div>
   )
@@ -114,6 +122,7 @@ function AdminLayout(): React.JSX.Element {
 
 function AppContent(): React.JSX.Element {
   const { isAuthenticated, loading } = useAuth()
+  const location = useLocation();
 
   // Show loading state while checking authentication
   if (loading) {
@@ -126,7 +135,12 @@ function AppContent(): React.JSX.Element {
   }
 
   // Show login page if not authenticated
+  // If user is trying to access a protected route, save it for redirect after login
   if (!isAuthenticated) {
+    // Save the intended destination if it's not the login page
+    if (location.pathname !== '/login' && location.pathname !== '/') {
+      sessionStorage.setItem('redirectAfterLogin', location.pathname);
+    }
     return <Login />
   }
 

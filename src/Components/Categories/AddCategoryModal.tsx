@@ -7,7 +7,6 @@ interface Category {
   name: string;
   slug: string;
   description?: string;
-  parentCategory?: string;
   image?: string;
   status: 'active' | 'inactive' | 'draft';
   sortOrder: number;
@@ -20,14 +19,17 @@ interface AddCategoryModalProps {
   editingCategory?: Category | null;
 }
 
+type ItemTypeOption = 'PRODUCT' | 'SERVICE';
+type CategoryState = 'ACTIVE' | 'INACTIVE' | 'DRAFT';
+
 interface CategoryFormData {
   name: string;
   slug: string;
   description: string;
-  parentCategory: string;
-  status: 'active' | 'inactive' | 'draft';
+  status: CategoryState;
   sortOrder: number;
   image: string;
+  itemType: ItemTypeOption;
 }
 
 const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
@@ -40,10 +42,10 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
     name: '',
     slug: '',
     description: '',
-    parentCategory: '',
-    status: 'active',
+    status: 'ACTIVE',
     sortOrder: 0,
-    image: ''
+    image: '',
+    itemType: 'PRODUCT'
   });
 
   const [errors, setErrors] = useState<Partial<CategoryFormData>>({});
@@ -55,20 +57,20 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
         name: editingCategory.name,
         slug: editingCategory.slug,
         description: editingCategory.description || '',
-        parentCategory: editingCategory.parentCategory || '',
-        status: editingCategory.status,
+        status: editingCategory.status.toUpperCase() as CategoryState,
         sortOrder: editingCategory.sortOrder,
-        image: editingCategory.image || ''
+        image: editingCategory.image || '',
+        itemType: 'PRODUCT'
       });
     } else {
       setFormData({
         name: '',
         slug: '',
         description: '',
-        parentCategory: '',
-        status: 'active',
+        status: 'ACTIVE',
         sortOrder: 0,
-        image: ''
+        image: '',
+        itemType: 'PRODUCT'
       });
     }
     setErrors({});
@@ -76,10 +78,19 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData(prev => {
+      if (name === 'status' || name === 'itemType') {
+        return {
+          ...prev,
+          [name]: value.toUpperCase() as CategoryFormData[keyof CategoryFormData],
+        };
+      }
+
+      return {
       ...prev,
-      [name]: value
-    }));
+        [name]: value,
+      };
+    });
     
     if (errors[name as keyof CategoryFormData]) {
       setErrors(prev => ({
@@ -119,7 +130,12 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await onSubmit(formData);
+      await onSubmit({
+        name: formData.name,
+        description: formData.description,
+        itemType: formData.itemType,
+        status: formData.status
+      });
     } catch (error) {
       console.error('Error submitting form:', error);
     } finally {
@@ -132,7 +148,6 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
       name: '',
       slug: '',
       description: '',
-      parentCategory: '',
       status: 'active',
       sortOrder: 0,
       image: ''
@@ -218,25 +233,6 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">
-                  Parent Category
-                </label>
-                <select
-                  id="parentCategory"
-                  name="parentCategory"
-                  value={formData.parentCategory}
-                  onChange={handleInputChange}
-                  className="form-select"
-                >
-                  <option value="">Select Parent Category</option>
-                  <option value="electronics">Electronics</option>
-                  <option value="clothing">Clothing</option>
-                  <option value="books">Books</option>
-                  <option value="home">Home & Garden</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
                   Status
                 </label>
                 <select
@@ -246,9 +242,27 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                   onChange={handleInputChange}
                   className="form-select"
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="draft">Draft</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="DRAFT">Draft</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">
+                  Item Type
+                </label>
+                <select
+                  id="itemType"
+                  name="itemType"
+                  value={formData.itemType}
+                  onChange={handleInputChange}
+                  className="form-select"
+                >
+                  <option value="PRODUCT">Product</option>
+                  <option value="SERVICE">Service</option>
                 </select>
               </div>
             </div>

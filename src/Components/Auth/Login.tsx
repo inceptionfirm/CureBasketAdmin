@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useLocale } from '../../contexts/LocaleContext';
 import { LoginProps } from '../../types';
 import './Login.css';
+import SuperAdminModal from './SuperAdminModal';
 
 const Login: React.FC<LoginProps> = () => {
   const { login, loading } = useAuth();
   const { config } = useConfig();
   const { t } = useLocale();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState<{
     email: string;
     password: string;
@@ -19,17 +23,12 @@ const Login: React.FC<LoginProps> = () => {
   const [errors, setErrors] = useState<{
     email?: string;
     password?: string;
-    general?: string;
   }>({});
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [rememberMe, setRememberMe] = useState<boolean>(false);
-
-  // Demo credentials for easy testing
-  const demoCredentials = [
-    { email: 'admin@flycanary.com', password: 'admin123', role: 'Admin' },
-    { email: 'user@flycanary.com', password: 'user123', role: 'User' },
-    { email: 'demo@flycanary.com', password: 'demo123', role: 'Demo' }
-  ];
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showSuperAdminModal, setShowSuperAdminModal] = useState<boolean>(false);
 
   useEffect(() => {
     // Load saved credentials if remember me was checked
@@ -82,11 +81,15 @@ const Login: React.FC<LoginProps> = () => {
     e.preventDefault();
     
     if (!validateForm()) {
+      setGeneralError(null);
+      setSuccessMessage(null);
       return;
     }
 
     try {
-      const result = await login(formData.email, formData.password);
+      setGeneralError(null);
+      setSuccessMessage(null);
+      const result = await login(formData.email, formData.password, rememberMe);
       
       if (result.success) {
         // Save email if remember me is checked
@@ -96,19 +99,40 @@ const Login: React.FC<LoginProps> = () => {
           localStorage.removeItem('flycanary_remembered_email');
         }
         
-        // Login successful - the App component will automatically redirect to dashboard
-        // No need for manual redirect as the auth context will trigger re-render
+        // Determine redirect URL (priority order):
+        // 1. Redirect URL from backend response
+        // 2. Saved redirect from sessionStorage (if user was trying to access a protected route)
+        // 3. Default to dashboard
+        const savedRedirect = sessionStorage.getItem('redirectAfterLogin');
+        const redirectUrl = result.redirectUrl || 
+                           savedRedirect || 
+                           '/dashboard';
+        
+        // Clear saved redirect
+        if (savedRedirect) {
+          sessionStorage.removeItem('redirectAfterLogin');
+        }
+        
+        console.log('🔀 Redirecting to:', redirectUrl);
+        
+        // Small delay to ensure auth state is updated, then navigate
+        setTimeout(() => {
+          navigate(redirectUrl, { replace: true });
+        }, 100);
       } else {
-        setErrors({ general: result.error || t('login.loginFailed') });
+        setGeneralError(result.error || t('login.loginFailed'));
       }
     } catch (error) {
-      setErrors({ general: t('login.unexpectedError') });
+      setGeneralError(t('login.unexpectedError'));
     }
   };
 
-  const fillDemoCredentials = (email: string, password: string) => {
-    setFormData({ email, password });
+  const handleSuperAdminSuccess = (email: string) => {
+    setFormData(prev => ({ ...prev, email }));
+    setShowSuperAdminModal(false);
     setErrors({});
+    setSuccessMessage('Super admin created successfully. Use your credentials to sign in.');
+    setGeneralError(null);
   };
 
   return (
@@ -126,9 +150,15 @@ const Login: React.FC<LoginProps> = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
-          {errors.general && (
+          {generalError && (
             <div className="error-message general-error">
-              {errors.general}
+              {generalError}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="success-message">
+              {successMessage}
             </div>
           )}
 
@@ -212,32 +242,25 @@ const Login: React.FC<LoginProps> = () => {
           </button>
         </form>
 
-        <div className="demo-credentials">
-          <h4>Demo Credentials</h4>
-          <div className="demo-buttons">
-            {demoCredentials.map((cred, index) => (
-              <button
-                key={index}
-                type="button"
-                className="demo-button"
-                onClick={() => fillDemoCredentials(cred.email, cred.password)}
-                disabled={loading}
-              >
-                {cred.role}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="login-footer">
           <p>
             Don't have an account?{' '}
-            <a href="#" className="signup-link">
+            <button
+              type="button"
+              className="signup-link"
+              onClick={() => setShowSuperAdminModal(true)}
+            >
               Sign up here
-            </a>
+            </button>
           </p>
         </div>
       </div>
+
+      <SuperAdminModal
+        isOpen={showSuperAdminModal}
+        onClose={() => setShowSuperAdminModal(false)}
+        onSuccess={handleSuperAdminSuccess}
+      />
     </div>
   );
 };

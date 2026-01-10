@@ -1,13 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { useLocale } from '../../contexts/LocaleContext';
-import { Blog } from '../../services/blogService';
 import './AddBlogModal.css';
+
+// Local Blog type for editing (matches what Blogs component uses)
+interface EditingBlog {
+  id: string | number;
+  title?: string;
+  slug?: string;
+  content?: string;
+  excerpt?: string;
+  featuredImage?: string;
+  category?: {
+    id: string;
+    name?: string;
+  };
+  tags?: string[];
+  status?: 'draft' | 'published' | 'archived';
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string[];
+  // Also support API Blog format
+  itemName?: string;
+  itemHeading?: string;
+  itemDescription?: string;
+  author?: string | { id?: string; name?: string; email?: string; avatar?: string };
+  categoryId?: number | string;
+  [key: string]: any; // Allow additional properties
+}
 
 interface AddBlogModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: BlogFormData) => void;
-  editingBlog?: Blog | null;
+  editingBlog?: EditingBlog | null;
 }
 
 interface BlogFormData {
@@ -54,13 +79,31 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
 
   useEffect(() => {
     if (editingBlog) {
+      // Support both local Blog format and API Blog format
+      // Check multiple possible fields for content
+      const content = editingBlog.content || 
+                      (editingBlog as any).itemDescription || 
+                      editingBlog.excerpt || 
+                      '';
+      const excerpt = editingBlog.excerpt || 
+                      (editingBlog as any).itemDescription || 
+                      editingBlog.content || 
+                      '';
+      
+      console.log('📝 Populating form for editing:', {
+        editingBlog,
+        content,
+        excerpt,
+        itemDescription: (editingBlog as any).itemDescription
+      });
+      
       setFormData({
-        title: editingBlog.title || '',
-        slug: editingBlog.slug || '',
-        content: editingBlog.content || '',
-        excerpt: editingBlog.excerpt || '',
+        title: editingBlog.title || (editingBlog as any).itemName || '',
+        slug: editingBlog.slug || (editingBlog as any).itemHeading || '',
+        content: content,
+        excerpt: excerpt,
         featuredImage: editingBlog.featuredImage || '',
-        categoryId: editingBlog.category?.id || '',
+        categoryId: editingBlog.category?.id || String((editingBlog as any).categoryId || ''),
         tags: editingBlog.tags || [],
         status: editingBlog.status || 'draft',
         seoTitle: editingBlog.seoTitle || '',
@@ -200,36 +243,90 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
       newErrors.slug = 'Slug is required';
     }
 
+    // Content validation - be lenient when editing
     if (!formData.content.trim()) {
-      newErrors.content = 'Content is required';
+      if (editingBlog) {
+        // When editing, check if content exists in editingBlog (might be in itemDescription)
+        const hasContent = editingBlog.content || 
+                          (editingBlog as any).itemDescription || 
+                          editingBlog.excerpt;
+        if (hasContent) {
+          // Content exists in editingBlog, so validation passes
+          // The content will be preserved from editingBlog in the update payload
+          console.log('📝 Content validation: Content exists in editingBlog, allowing update');
+        } else {
+          // No content found anywhere - but for updates, we'll allow it and use empty string
+          // The backend might accept empty content for updates
+          console.log('⚠️ Content validation: No content found, but allowing update (editing mode)');
+        }
+      } else {
+        // Creating new blog - content is required
+        newErrors.content = 'Content is required';
+      }
     }
-
+    
+    // Excerpt validation - be lenient when editing
     if (!formData.excerpt.trim()) {
-      newErrors.excerpt = 'Excerpt is required';
+      if (editingBlog) {
+        // When editing, check if excerpt exists in editingBlog
+        const hasExcerpt = editingBlog.excerpt || 
+                          (editingBlog as any).itemDescription || 
+                          editingBlog.content;
+        if (hasExcerpt) {
+          console.log('📝 Excerpt validation: Excerpt exists in editingBlog, allowing update');
+        } else {
+          // No excerpt found - but for updates, we'll allow it
+          console.log('⚠️ Excerpt validation: No excerpt found, but allowing update (editing mode)');
+        }
+      } else {
+        // Creating new blog - excerpt is required
+        newErrors.excerpt = 'Excerpt is required';
+      }
     }
 
-    if (!formData.categoryId.trim()) {
-      newErrors.categoryId = 'Category is required';
-    }
+    // Category is optional based on API - make it optional in validation
+    // if (!formData.categoryId.trim()) {
+    //   newErrors.categoryId = 'Category is required';
+    // }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValid = Object.keys(newErrors).length === 0;
+    console.log('📝 Form validation result:', isValid, 'Errors:', newErrors);
+    return isValid;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('📝 Form submit triggered');
+    console.log('📝 Form data:', formData);
+    console.log('📝 Editing blog?', editingBlog ? 'Yes' : 'No');
+    console.log('📝 Editing blog data:', editingBlog);
     
-    if (!validateForm()) {
+    const isValid = validateForm();
+    console.log('📝 Form validation result:', isValid);
+    console.log('📝 Form errors:', errors);
+    
+    // For updates, allow submission even if validation fails
+    // The parent component will handle missing content by using editingBlog data
+    if (!isValid && !editingBlog) {
+      console.log('❌ Blocking submission for new blog due to validation errors');
       return;
+    } else if (!isValid && editingBlog) {
+      console.log('⚠️ Validation failed but allowing submission (editing mode - will use editingBlog data)');
     }
 
+    console.log('✅ Form validation passed, calling onSubmit...');
     setIsSubmitting(true);
 
     try {
+      console.log('📝 Calling onSubmit with formData:', formData);
       await onSubmit(formData);
+      console.log('✅ onSubmit completed successfully');
       handleClose();
     } catch (error) {
-      console.error('Error submitting blog:', error);
+      console.error('❌ Error submitting blog:', error);
+      // Re-throw error so parent component can handle it
+      throw error;
     } finally {
       setIsSubmitting(false);
     }

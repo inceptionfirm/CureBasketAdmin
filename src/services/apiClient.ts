@@ -30,7 +30,8 @@ class APIClient {
 
   constructor() {
     const config = clientConfigManager.getConfig();
-    this.baseURL = `${config.api.baseURL}/${config.api.version}`;
+    // Always use the configured base URL (backend URL from config)
+    this.baseURL = this.buildBaseURL(config.api.baseURL, config.api.version);
     this.defaultHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -42,7 +43,8 @@ class APIClient {
   // Update configuration when it changes
   updateConfig() {
     const config = clientConfigManager.getConfig();
-    this.baseURL = `${config.api.baseURL}/${config.api.version}`;
+    // Always use the configured base URL (backend URL from config)
+    this.baseURL = this.buildBaseURL(config.api.baseURL, config.api.version);
     this.defaultHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -51,9 +53,55 @@ class APIClient {
     this.timeout = config.api.timeout;
   }
 
+  private buildBaseURL(baseURL: string, version?: string): string {
+    // For relative URLs (proxy), don't add trailing slash
+    if (baseURL.startsWith('/')) {
+      const trimmedBase = baseURL.replace(/\/+$/, '');
+      const trimmedVersion = (version || '').replace(/^\/+|\/+$/g, '');
+      const combined = trimmedVersion ? `${trimmedBase}/${trimmedVersion}` : trimmedBase;
+      return combined || '/api';
+    }
+    
+    // For absolute URLs, add trailing slash
+    const trimmedBase = baseURL.replace(/\/+$/, '');
+    const trimmedVersion = (version || '').replace(/^\/+|\/+$/g, '');
+    const combined = trimmedVersion ? `${trimmedBase}/${trimmedVersion}` : trimmedBase;
+    return `${combined}/`;
+  }
+
   // Build URL with query parameters
   private buildURL(endpoint: string, params?: Record<string, any>): string {
-    const url = new URL(endpoint, this.baseURL);
+    // Handle relative URLs (for proxy in development)
+    if (this.baseURL.startsWith('/')) {
+      const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+      const base = this.baseURL.endsWith('/') ? this.baseURL.slice(0, -1) : this.baseURL;
+      let url = `${base}${normalizedEndpoint}`;
+      
+      if (params) {
+        const queryParams = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            queryParams.append(key, String(value));
+          }
+        });
+        const queryString = queryParams.toString();
+        if (queryString) {
+          url += `?${queryString}`;
+        }
+        
+        // Log the final URL for blog endpoints
+        if (endpoint.includes('blog') && import.meta.env.DEV) {
+          console.log('🔍 Final URL with query params:', url);
+          console.log('🔍 Query params object:', params);
+        }
+      }
+      
+      return url;
+    }
+    
+    // Handle absolute URLs (for production)
+    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+    const url = new URL(normalizedEndpoint, this.baseURL);
     
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -61,6 +109,12 @@ class APIClient {
           url.searchParams.append(key, String(value));
         }
       });
+      
+      // Log the final URL for blog endpoints
+      if (endpoint.includes('blog') && import.meta.env.DEV) {
+        console.log('🔍 Final URL with query params:', url.toString());
+        console.log('🔍 Query params object:', params);
+      }
     }
     
     return url.toString();
@@ -68,16 +122,23 @@ class APIClient {
 
   // Get auth token
   private getAuthToken(): string | null {
-    return localStorage.getItem('authToken');
+    return localStorage.getItem('flycanary_token') || localStorage.getItem('authToken');
   }
 
   // Build headers
-  private buildHeaders(customHeaders?: Record<string, string>): Record<string, string> {
+  private buildHeaders(customHeaders?: Record<string, string>, skipAuth?: boolean): Record<string, string> {
     const headers = { ...this.defaultHeaders, ...customHeaders };
     
-    const token = this.getAuthToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
+    // Only add Authorization header if not skipped (for login endpoint)
+    if (!skipAuth) {
+      const token = this.getAuthToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+        // Log token presence (first 20 chars only for security)
+        if (import.meta.env.DEV) {
+          console.log('🔑 Auth token found:', token.substring(0, 20) + '...');
+        }
+      }
     }
     
     return headers;
@@ -90,32 +151,169 @@ class APIClient {
     const { method, endpoint, data, params, headers, timeout = this.timeout } = request;
     
     const url = this.buildURL(endpoint, params);
-    const requestHeaders = this.buildHeaders(headers);
+    // Skip auth header for login endpoint (we're not authenticated yet)
+    const skipAuth = endpoint.includes('/auth/login');
+    const requestHeaders = this.buildHeaders(headers, skipAuth);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     
     try {
+      // Debug logging (only for non-GET requests or errors)
+      if (method !== 'GET' || import.meta.env.DEV) {
+        console.log('🚀 API Request:', method, endpoint);
+        if (endpoint.includes('/auth/login')) {
+          console.log('🔐 Login Request Details:', {
+            url,
+            method,
+            headers: { ...requestHeaders, Authorization: requestHeaders.Authorization ? 'Bearer ***' : 'none' },
+            hasData: !!data,
+            payload: data && !(data instanceof FormData) ? { ...data, password: '***hidden***' } : '[FormData]',
+            skipAuth,
+          });
+        }
+      }
+      
+      // Handle FormData differently - don't stringify and let browser set Content-Type
+      const isFormData = data instanceof FormData;
+      
+      // Log the payload before stringifying (for debugging)
+      if (data && !isFormData && method === 'POST' && endpoint.includes('blog')) {
+        console.log('🔍 apiClient: Raw payload before stringify:', data);
+        console.log('🔍 apiClient: Payload has status?', 'status' in data, data.status);
+        console.log('🔍 apiClient: Payload keys:', Object.keys(data));
+      }
+      
+      const body = isFormData ? data : (data ? JSON.stringify(data) : undefined);
+      
+      // Log the stringified body for blog requests
+      if (body && !isFormData && method === 'POST' && endpoint.includes('blog')) {
+        console.log('🔍 apiClient: Stringified body:', body);
+        try {
+          const parsed = JSON.parse(body as string);
+          console.log('🔍 apiClient: Parsed body has status?', 'status' in parsed, parsed.status);
+        } catch (e) {
+          console.error('🔍 apiClient: Failed to parse body for logging:', e);
+        }
+      }
+      
+      // Remove Content-Type header for FormData to let browser set it with boundary
+      if (isFormData) {
+        delete requestHeaders['Content-Type'];
+      }
+      
       const response = await fetch(url, {
         method,
         headers: requestHeaders,
-        body: data ? JSON.stringify(data) : undefined,
+        body,
         signal: controller.signal,
       });
       
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      // Only log errors or non-GET requests
+      if (!response.ok || method !== 'GET') {
+        console.log('📥 API Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          endpoint,
+        });
       }
       
-      const result = await response.json();
+      clearTimeout(timeoutId);
+      
+      // Try to parse response body (even for errors, backend might send useful info)
+      let result: any;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          result = await response.json();
+      // Log response body for errors or non-GET requests, or for debugging
+      if (!response.ok || method !== 'GET' || import.meta.env.DEV) {
+        console.log('📦 Response Body:', result);
+        if (method === 'GET' && endpoint.includes('blog')) {
+          console.log('📦 Full response for blog GET:', {
+            url: response.url,
+            status: response.status,
+            body: result
+          });
+        }
+      }
+        } catch (e) {
+          console.error('❌ Failed to parse JSON response:', e);
+          // If JSON parsing fails, result stays undefined
+        }
+      }
+      
+      if (!response.ok) {
+        // Extract error message from response body if available
+        const errorMessage = result?.message || result?.error || result?.msg || `HTTP ${response.status}: ${response.statusText}`;
+        
+        // Enhanced logging for debugging, especially for login
+        if (endpoint.includes('/auth/login')) {
+          console.error('❌ Login API Error Response:', {
+            status: response.status,
+            statusText: response.statusText,
+            url: response.url,
+            requestUrl: url,
+            errorBody: result,
+            errorMessage,
+            headers: Object.fromEntries(response.headers.entries()),
+          });
+        } else {
+          console.error('❌ API Error Response:', {
+            status: response.status,
+            statusText: response.statusText,
+            url: response.url,
+            errorBody: result,
+            errorMessage,
+          });
+        }
+        
+        return {
+          success: false,
+          error: errorMessage,
+          message: result?.message,
+          data: result,
+        };
+      }
+      
+      // Handle successful HTTP response - but check backend's success field
+      const responseData = result?.data || result;
+      const responseSuccess = result?.success !== undefined ? result.success : true;
+      
+      // If backend returns success: false, treat it as an error even if HTTP status is 200
+      if (!responseSuccess) {
+        // Extract error message from response body
+        const errorMessage = result?.message || result?.error || result?.msg || `Request failed: ${endpoint}`;
+        
+        console.error('❌ API returned success: false:', {
+          status: response.status,
+          endpoint,
+          errorBody: result,
+          errorMessage,
+        });
+        
+        return {
+          success: false,
+          error: errorMessage,
+          message: result?.message,
+          data: result?.data || result,
+        };
+      }
+      
+      // Only log for non-GET requests or if there's an issue
+      if (method !== 'GET' || !responseSuccess) {
+        console.log('✅ API Response:', {
+          status: response.status,
+          success: responseSuccess,
+          endpoint,
+        });
+      }
       
       return {
-        success: true,
-        data: result.data || result,
-        message: result.message,
-        pagination: result.pagination,
+        success: responseSuccess,
+        data: responseData,
+        message: result?.message,
+        pagination: result?.pagination,
       };
       
     } catch (error) {
@@ -208,6 +406,57 @@ class APIClient {
       endpoint,
       headers,
     });
+  }
+
+  // DELETE with body (for bulk operations)
+  async deleteWithBody<T = any>(
+    endpoint: string,
+    data?: any,
+    headers?: Record<string, string>
+  ): Promise<APIResponse<T>> {
+    return this.request<T>({
+      method: 'DELETE',
+      endpoint,
+      data,
+      headers,
+    });
+  }
+
+  // GET blob (file downloads)
+  async getBlob(
+    endpoint: string,
+    params?: Record<string, any>,
+    headers?: Record<string, string>
+  ): Promise<APIResponse<Blob>> {
+    this.updateConfig();
+    const url = this.buildURL(endpoint, params);
+    const requestHeaders = this.buildHeaders(headers);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: requestHeaders,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      return { success: true, data: blob };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
   }
 
   // Upload file

@@ -21,6 +21,8 @@ interface MedicineFormData {
   status: 'active' | 'inactive';
   prescriptionRequired: boolean;
   image: string;
+  barcode?: string;
+  countryOfOrigin?: string;
 }
 
 const AddMedicineModal: React.FC<AddMedicineModalProps> = ({ 
@@ -40,11 +42,13 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
     sku: '',
     status: 'active',
     prescriptionRequired: false,
-    image: ''
+    image: '',
+    countryOfOrigin: ''
   });
 
   const [errors, setErrors] = useState<Partial<MedicineFormData>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
 
@@ -59,22 +63,64 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
   ];
 
   useEffect(() => {
+    // Clear errors when modal opens or editingMedicine changes
+    setSubmitError(null);
+    setErrors({});
+    
     if (editingMedicine) {
+      console.log('💉 AddMedicineModal: Populating form with editingMedicine:', editingMedicine);
+      console.log('💉 AddMedicineModal: Category:', editingMedicine.category);
+      console.log('💉 AddMedicineModal: Form:', editingMedicine.form);
+      console.log('💉 AddMedicineModal: SKU:', editingMedicine.sku);
+      console.log('💉 AddMedicineModal: Country of Origin:', editingMedicine.countryOfOrigin || (editingMedicine as any).countryOfOrigin);
+      
+      // Ensure form is set from medicineForm, dosageForm, or form
+      const formValue = editingMedicine.form || (editingMedicine as any).medicineForm || (editingMedicine as any).dosageForm || '';
+      
+      // Get countryOfOrigin from multiple possible locations
+      const countryOfOriginValue = editingMedicine.countryOfOrigin || 
+                                   (editingMedicine as any).countryOfOrigin || 
+                                   (editingMedicine as any).country_of_origin ||
+                                   '';
+      
       setFormData({
         name: editingMedicine.name || '',
         description: editingMedicine.description || '',
         category: editingMedicine.category || '',
         manufacturer: editingMedicine.manufacturer || '',
-        form: editingMedicine.form || '',
+        form: formValue,
         price: editingMedicine.price || 0,
-        stock: editingMedicine.stock || 0,
+        stock: (editingMedicine as any).stock || 0,
         sku: editingMedicine.sku || '',
-        status: editingMedicine.status || 'active',
+        status: (editingMedicine.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive',
         prescriptionRequired: editingMedicine.prescriptionRequired || false,
-        image: editingMedicine.image || ''
+        image: editingMedicine.image || '',
+        countryOfOrigin: countryOfOriginValue
+      });
+      
+      console.log('💉 AddMedicineModal: Form data set:', {
+        category: editingMedicine.category || '',
+        form: editingMedicine.form || '',
+        sku: editingMedicine.sku || ''
+      });
+    } else {
+      // Reset form when not editing
+      setFormData({
+        name: '',
+        description: '',
+        category: '',
+        manufacturer: '',
+        form: '',
+        price: 0,
+        stock: 0,
+        sku: '',
+        status: 'active',
+        prescriptionRequired: false,
+        image: '',
+        countryOfOrigin: ''
       });
     }
-  }, [editingMedicine]);
+  }, [editingMedicine, isOpen]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -149,19 +195,28 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Clear previous errors
+    setSubmitError(null);
+    
     if (!validateForm()) {
-      setActiveTab('basic');
+      console.log('❌ Form validation failed');
       return;
     }
 
     setIsSubmitting(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      onSubmit(formData);
+      console.log('💉 Submitting medicine form:', formData);
+      // Await the onSubmit call - it's async and handles the API call
+      await onSubmit(formData);
+      console.log('✅ Medicine form submitted successfully');
+      // Only close modal if submission was successful
       handleClose();
     } catch (error) {
-      console.error('Error submitting form:', error);
+      console.error('❌ Error submitting medicine form:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save medicine. Please try again.';
+      setSubmitError(errorMessage);
+      // Don't close modal on error - let user see the error and retry
     } finally {
       setIsSubmitting(false);
     }
@@ -184,7 +239,8 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
       sku: '',
       status: 'active',
       prescriptionRequired: false,
-      image: ''
+      image: '',
+      countryOfOrigin: ''
     });
     setErrors({});
     setSelectedFile(null);
@@ -301,6 +357,20 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
 
               <div className="form-row">
                 <div className="form-group">
+                  <label htmlFor="countryOfOrigin" className="form-label">
+                    Country of Origin
+                  </label>
+                  <input
+                    type="text"
+                    id="countryOfOrigin"
+                    name="countryOfOrigin"
+                    value={formData.countryOfOrigin || ''}
+                    onChange={handleInputChange}
+                    className="form-input"
+                    placeholder="Enter country of origin"
+                  />
+                </div>
+                <div className="form-group">
                   <label htmlFor="form" className="form-label">
                     Form <span className="required">*</span>
                   </label>
@@ -318,6 +388,9 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
                   </select>
                   {errors.form && <span className="error-message">{errors.form}</span>}
                 </div>
+              </div>
+
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="status" className="form-label">
                     Status
@@ -454,19 +527,25 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
             </div>
           </div>
 
-          <div className="medicine-modal-footer">
-            <button type="button" className="btn-secondary" onClick={handleClose}>
+          {/* Error message */}
+          {submitError && (
+            <div style={{ padding: '10px', margin: '10px 20px', background: '#fee', color: '#c33', borderRadius: '4px', border: '1px solid #fcc' }}>
+              <strong>Error:</strong> {submitError}
+            </div>
+          )}
+          
+          {/* Footer buttons */}
+          <div style={{ padding: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #e0e0e0', marginTop: '20px' }}>
+            <button type="button" onClick={handleClose} style={{ padding: '10px 20px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: '4px', cursor: 'pointer' }}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary" disabled={isSubmitting}>
+            <button type="submit" disabled={isSubmitting} style={{ padding: '10px 20px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
               {isSubmitting ? (
                 <>
-                  <span className="spinner"></span>
-                  {editingMedicine ? 'Updating...' : 'Adding...'}
+                  <span>{editingMedicine ? 'Updating...' : 'Creating...'}</span>
                 </>
               ) : (
                 <>
-                  <span className="btn-icon">{editingMedicine ? '✏️' : '➕'}</span>
                   {editingMedicine ? 'Update Medicine' : 'Add Medicine'}
                 </>
               )}

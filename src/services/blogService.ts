@@ -1,248 +1,456 @@
 import { apiClient } from './apiClient';
-import { clientConfigManager } from '../config/clientConfig';
 
-export interface Blog {
-  id: string;
-  title: string;
-  slug: string;
-  content: string;
-  excerpt: string;
-  featuredImage?: string;
-  author: {
-    id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-  };
-  category: {
-    id: string;
-    name: string;
-    slug: string;
-  };
-  tags: string[];
-  status: 'draft' | 'published' | 'archived';
-  publishedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-  views: number;
-  likes: number;
-  comments: number;
-  seoTitle?: string;
-  seoDescription?: string;
-  seoKeywords?: string[];
+// Blog API Types based on actual backend structure
+export interface BlogMainAttribute {
+  id?: number;
+  name: string;
+  scale?: string;
+  value: string;
+  subAttributes?: BlogSubAttribute[];
 }
 
-export interface BlogFilters {
-  search?: string;
-  status?: string;
-  category?: string;
+export interface BlogSubAttribute {
+  id?: number;
+  name: string;
+  value: string;
+}
+
+export interface Blog {
+  id: number;
+  categoryId?: number;
+  itemName: string;
+  itemHeading: string;
+  itemDescription?: string;
   author?: string;
+  priority?: 'HIGH' | 'MEDIUM' | 'LOW';
   tags?: string[];
-  publishedAfter?: string;
-  publishedBefore?: string;
+  publishDate?: string;
+  status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'; // Backend requires this field
+  active: boolean;
+  mainAttributes?: BlogMainAttribute[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface BlogListParams {
+  itemType?: 'BLOG';
+  status?: 'ACTIVE' | 'INACTIVE';
+  priority?: 'HIGH' | 'MEDIUM' | 'LOW';
   page?: number;
   pageSize?: number;
-  filters?: BlogFilters;
-  sortBy?: 'title' | 'createdAt' | 'publishedAt' | 'views' | 'likes';
-  sortOrder?: 'asc' | 'desc';
+  sortBy?: string;
+  sortOrder?: 'ASC' | 'DESC';
 }
 
 export interface BlogListResponse {
   blogs: Blog[];
   pagination: {
-    current: number;
+    page: number;
     pageSize: number;
     total: number;
     totalPages: number;
   };
 }
 
-export interface BlogStats {
-  totalBlogs: number;
-  publishedBlogs: number;
-  draftBlogs: number;
-  archivedBlogs: number;
-  totalViews: number;
-  totalLikes: number;
-  totalComments: number;
-}
-
-export interface BlogAnalytics {
-  views: number;
-  likes: number;
-  comments: number;
-  shares: number;
-  readingTime: number;
-  bounceRate: number;
-  topCategories: Array<{
-    category: string;
-    count: number;
-  }>;
-  topTags: Array<{
-    tag: string;
-    count: number;
-  }>;
-}
-
 class BlogService {
-  private baseUrl = '/api/blogs';
+  private baseEndpoint = '/blog';
 
-  async getBlogs(params: BlogListParams = {}): Promise<BlogListResponse> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    const queryParams = new URLSearchParams();
+  // 6. Create New Blog
+  // POST /blog/add-blog
+  // Payload: { itemType, category, status, title, content, excerpt, seoTitle, seoDescription }
+  async createBlog(blogData: {
+    itemType?: 'BLOG';
+    category?: string;
+    status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+    title?: string;
+    content?: string;
+    excerpt?: string;
+    seoTitle?: string;
+    seoDescription?: string;
+    // Legacy fields for backward compatibility
+    id?: number;
+    categoryId?: number;
+    itemName?: string;
+    itemHeading?: string;
+    itemDescription?: string;
+    author?: string;
+    priority?: 'HIGH' | 'MEDIUM' | 'LOW';
+    tags?: string[];
+    publishDate?: string;
+    active?: boolean;
+    mainAttributes?: BlogMainAttribute[];
+  }): Promise<{ success: boolean; message?: string; data?: Blog }> {
+    // Build payload matching curl structure exactly
+    const payload: any = {
+      itemType: blogData.itemType || 'BLOG',
+      category: blogData.category || blogData.categoryId?.toString() || '',
+      status: blogData.status || 'DRAFT',
+      title: blogData.title || blogData.itemName || '',
+      content: blogData.content || blogData.itemDescription || '',
+      excerpt: blogData.excerpt || '',
+      seoTitle: blogData.seoTitle || blogData.title || '',
+      seoDescription: blogData.seoDescription || blogData.excerpt || ''
+    };
     
-    if (params.page) queryParams.append('page', params.page.toString());
-    if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString());
-    if (params.sortBy) queryParams.append('sortBy', params.sortBy);
-    if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+    // Remove only null/undefined values, but keep empty strings for optional fields
+    // Required fields: itemType, status, title - always keep these
+    Object.keys(payload).forEach(key => {
+      // Always keep required fields
+      if (key === 'itemType' || key === 'status' || key === 'title') {
+        return;
+      }
+      // Remove null/undefined, but keep empty strings for optional fields
+      if (payload[key] === null || payload[key] === undefined) {
+        delete payload[key];
+      }
+    });
     
-    if (params.filters) {
-      if (params.filters.search) queryParams.append('search', params.filters.search);
-      if (params.filters.status) queryParams.append('status', params.filters.status);
-      if (params.filters.category) queryParams.append('category', params.filters.category);
-      if (params.filters.author) queryParams.append('author', params.filters.author);
-      if (params.filters.tags) queryParams.append('tags', params.filters.tags.join(','));
-      if (params.filters.publishedAfter) queryParams.append('publishedAfter', params.filters.publishedAfter);
-      if (params.filters.publishedBefore) queryParams.append('publishedBefore', params.filters.publishedBefore);
+    const endpoint = `${this.baseEndpoint}/add-blog`;
+    console.log('📝 Create blog endpoint:', endpoint);
+    console.log('📝 Create blog payload (raw):', payload);
+    console.log('📝 Create blog payload (stringified):', JSON.stringify(payload, null, 2));
+    console.log('📝 Payload keys:', Object.keys(payload));
+    console.log('📝 Payload values:', Object.values(payload));
+    
+    const response = await apiClient.post<Blog>(endpoint, payload);
+    console.log('📝 Create blog response:', response);
+    
+    if (!response.success) {
+      console.error('❌ Blog creation failed:', {
+        error: response.error,
+        message: response.message,
+        data: response.data,
+        fullResponse: response
+      });
     }
 
-    const response = await apiClient.get(`${this.baseUrl}?${queryParams.toString()}`);
-    return response.data;
+    if (!response.success) {
+      console.error('❌ Failed to create blog:', {
+        error: response.error,
+        message: response.message,
+        data: response.data,
+        fullResponse: response
+      });
+      
+      // Extract more detailed error message from various possible locations
+      let errorDetails = 'Failed to create blog';
+      
+      if (response.data) {
+        if (typeof response.data === 'string') {
+          errorDetails = response.data;
+        } else if (response.data.message) {
+          errorDetails = response.data.message;
+        } else if (response.data.error) {
+          errorDetails = response.data.error;
+        } else if (response.data.msg) {
+          errorDetails = response.data.msg;
+        } else if (response.data.errorMessage) {
+          errorDetails = response.data.errorMessage;
+        }
+      }
+      
+      if (response.error) {
+        errorDetails = response.error;
+      } else if (response.message) {
+        errorDetails = response.message;
+      }
+      
+      // Create error object with full details
+      const error = new Error(errorDetails);
+      (error as any).response = response;
+      (error as any).data = response.data;
+      throw error;
+    }
+
+    return {
+      success: true,
+      message: response.message || 'Blog created successfully',
+      data: response.data as Blog,
+    };
   }
 
-  async getBlog(id: string): Promise<Blog> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
+  // 7. Update Blog
+  // POST /blog/update-blog/{id}
+  // Payload: Only fields to update (single or multiple)
+  async updateBlog(id: number, updates: {
+    itemType?: 'BLOG';
+    category?: string;
+    status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+    title?: string;
+    content?: string;
+    excerpt?: string;
+    seoTitle?: string;
+    seoDescription?: string;
+    // Legacy fields for backward compatibility
+    [key: string]: any;
+  }): Promise<{ success: boolean; message?: string; data?: Blog }> {
+    // Build update payload - only include fields that are being updated
+    const updatePayload: any = {};
+    
+    // Map legacy fields to new structure if needed
+    if (updates.itemType !== undefined) updatePayload.itemType = updates.itemType;
+    if (updates.category !== undefined) updatePayload.category = updates.category;
+    if (updates.status !== undefined) updatePayload.status = updates.status;
+    if (updates.title !== undefined) updatePayload.title = updates.title;
+    if (updates.content !== undefined) updatePayload.content = updates.content;
+    if (updates.excerpt !== undefined) updatePayload.excerpt = updates.excerpt;
+    if (updates.seoTitle !== undefined) updatePayload.seoTitle = updates.seoTitle;
+    if (updates.seoDescription !== undefined) updatePayload.seoDescription = updates.seoDescription;
+    
+    // Handle legacy field mappings
+    if (updates.itemName !== undefined && !updatePayload.title) {
+      updatePayload.title = updates.itemName;
+    }
+    if (updates.itemDescription !== undefined && !updatePayload.content) {
+      updatePayload.content = updates.itemDescription;
+    }
+    if (updates.categoryId !== undefined && !updatePayload.category) {
+      updatePayload.category = updates.categoryId.toString();
+    }
+    
+    // Remove id from payload (it's in the URL)
+    delete updatePayload.id;
+    
+    // Remove null/undefined/empty values
+    Object.keys(updatePayload).forEach(key => {
+      if (updatePayload[key] === null || updatePayload[key] === undefined || updatePayload[key] === '') {
+        delete updatePayload[key];
+      }
+    });
+
+    const endpoint = `${this.baseEndpoint}/update-blog/${id}`;
+    console.log('📝 Update blog endpoint:', endpoint);
+    console.log('📝 Update blog payload:', JSON.stringify(updatePayload, null, 2));
+    
+    const response = await apiClient.post<Blog>(endpoint, updatePayload);
+    console.log('📝 Update blog response:', response);
+
+    if (!response.success) {
+      // Extract detailed error message
+      let errorMessage = 'Failed to update blog';
+      
+      if (response.error) {
+        errorMessage = response.error;
+      } else if (response.data) {
+        if (typeof response.data === 'string') {
+          errorMessage = response.data;
+        } else if (response.data.message) {
+          errorMessage = response.data.message;
+        } else if (response.data.error) {
+          errorMessage = response.data.error;
+        } else if (response.data.msg) {
+          errorMessage = response.data.msg;
+  }
+      }
+      
+      console.error('❌ Failed to update blog:', {
+        error: response.error,
+        message: response.message,
+        data: response.data,
+        errorMessage
+      });
+      
+      throw new Error(errorMessage);
     }
 
-    const response = await apiClient.get(`${this.baseUrl}/${id}`);
-    return response.data;
+    return {
+      success: true,
+      message: response.message || 'Blog updated successfully',
+      data: response.data as Blog,
+    };
   }
 
-  async createBlog(blogData: Partial<Blog>): Promise<Blog> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
+  // 8. Get Blog by ID
+  // POST /blog/get-blog/{id}
+  async getBlogById(id: number): Promise<Blog> {
+    const endpoint = `${this.baseEndpoint}/get-blog/${id}`;
+    console.log('📝 Get blog by ID endpoint:', endpoint);
+    const response = await apiClient.post<Blog>(endpoint);
+    console.log('📝 Get blog response:', response);
+
+    if (!response.success) {
+      console.error('❌ Failed to fetch blog:', response.error);
+      throw new Error(response.error || 'Failed to fetch blog');
     }
 
-    const response = await apiClient.post(this.baseUrl, blogData);
-    return response.data;
+    return response.data as Blog;
   }
 
-  async updateBlog(id: string, blogData: Partial<Blog>): Promise<Blog> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
+  // 9. Get All Blogs (with Filters)
+  // Note: Endpoint might be /blog/get-all (without userType) or might need POST method
+  // User didn't provide curl for this endpoint, trying /blog/get-all first
+  async getAllBlogs(userType: string = 'ADMIN', params: BlogListParams = {}): Promise<BlogListResponse> {
+    const queryParams: Record<string, any> = {};
+    
+    if (params.itemType) queryParams.itemType = params.itemType;
+    
+    // Backend requires status/type parameter - error says "Invalid 'Type': null"
+    // Always include status if provided, and also try 'type' parameter
+    if (params.status && params.status !== null && params.status !== undefined) {
+      // Ensure status is uppercase and valid
+      const statusUpper = String(params.status).toUpperCase();
+      if (statusUpper === 'DRAFT' || statusUpper === 'PUBLISHED' || statusUpper === 'ARCHIVED') {
+        queryParams.status = statusUpper;
+        // Also try 'type' parameter in case backend expects that name
+        queryParams.type = statusUpper;
+      }
+    }
+    
+    // Also check if 'type' is provided separately
+    if (params.type && params.type !== null && params.type !== undefined) {
+      const typeUpper = String(params.type).toUpperCase();
+      if (typeUpper === 'DRAFT' || typeUpper === 'PUBLISHED' || typeUpper === 'ARCHIVED') {
+        queryParams.type = typeUpper;
+        // If status wasn't set, also set it
+        if (!queryParams.status) {
+          queryParams.status = typeUpper;
+  }
+      }
+    }
+    
+    console.log('📝 BlogService queryParams before sending:', queryParams);
+    
+    if (params.priority) queryParams.priority = params.priority;
+    if (params.page !== undefined) queryParams.page = params.page;
+    if (params.pageSize !== undefined) queryParams.pageSize = params.pageSize;
+    if (params.sortBy) queryParams.sortBy = params.sortBy;
+    if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
+    
+    // Remove any null/undefined values to prevent sending them as query params
+    Object.keys(queryParams).forEach(key => {
+      if (queryParams[key] === null || queryParams[key] === undefined) {
+        delete queryParams[key];
+      }
+    });
+
+    // Use /blog/get-all without userType in path (userType can be added as query param if needed)
+    const endpoint = `${this.baseEndpoint}/get-all`;
+    console.log('📝 Fetching all blogs:', endpoint, 'with params:', queryParams);
+    console.log('📝 Full URL will be:', endpoint);
+    
+    // Try GET first, if it fails with 404, try POST method (like get-blog-by-id uses POST)
+    let response;
+    try {
+      response = await apiClient.get<{
+        content?: Blog[];
+        data?: Blog[];
+        pageInfo?: {
+          pageNumber: number;
+          pageSize: number;
+          totalRecords: number;
+          totalPages: number;
+        };
+      }>(endpoint, queryParams);
+      
+      // If GET fails, try POST (some endpoints use POST instead of GET)
+      if (!response.success) {
+        console.log('📝 GET failed, trying POST method...');
+        response = await apiClient.post<{
+          content?: Blog[];
+          data?: Blog[];
+          pageInfo?: {
+            pageNumber: number;
+            pageSize: number;
+            totalRecords: number;
+            totalPages: number;
+          };
+        }>(endpoint, queryParams);
+      }
+    } catch (getError: any) {
+      // If GET throws an error, try POST method
+      console.log('📝 GET failed with error, trying POST method...', getError);
+      try {
+        response = await apiClient.post<{
+          content?: Blog[];
+          data?: Blog[];
+          pageInfo?: {
+            pageNumber: number;
+            pageSize: number;
+            totalRecords: number;
+            totalPages: number;
+          };
+        }>(endpoint, queryParams);
+      } catch (postError) {
+        throw getError; // Re-throw original error if POST also fails
+      }
+    }
+    console.log('📝 Get all blogs response:', response);
+    console.log('📝 Get all blogs response.data:', response.data);
+
+    if (!response.success) {
+      // Extract detailed error message
+      let errorMessage = 'Failed to fetch blogs';
+      
+      if (response.error) {
+        errorMessage = response.error;
+      } else if (response.data) {
+        if (typeof response.data === 'string') {
+          errorMessage = response.data;
+        } else if (response.data.message) {
+          errorMessage = response.data.message;
+        } else if (response.data.error) {
+          errorMessage = response.data.error;
+        } else if (response.data.msg) {
+          errorMessage = response.data.msg;
+  }
+      }
+      
+      console.error('❌ Failed to fetch blogs:', {
+        error: response.error,
+        message: response.message,
+        data: response.data,
+        errorMessage
+      });
+      
+      throw new Error(errorMessage);
     }
 
-    const response = await apiClient.put(`${this.baseUrl}/${id}`, blogData);
-    return response.data;
+    const data = response.data ?? {};
+    
+    // Handle different response structures
+    // Backend might return: { content: [...] } or { data: [...] } or just an array
+    let content: Blog[] = [];
+    
+    if (Array.isArray(data)) {
+      content = data;
+    } else if (Array.isArray(data.content)) {
+      content = data.content;
+    } else if (Array.isArray(data.data)) {
+      content = data.data;
+    } else if (Array.isArray(data.blogs)) {
+      content = data.blogs;
+    }
+    
+    const pageInfo = data.pageInfo || data.pagination;
+
+    return {
+      blogs: Array.isArray(content) ? content : [],
+      pagination: {
+        page: (pageInfo?.pageNumber ?? pageInfo?.page ?? params.page ?? 0) + 1,
+        pageSize: pageInfo?.pageSize ?? pageInfo?.size ?? params.pageSize ?? 10,
+        total: pageInfo?.totalRecords ?? pageInfo?.total ?? content.length,
+        totalPages: pageInfo?.totalPages ?? Math.ceil((pageInfo?.totalRecords ?? content.length) / (pageInfo?.pageSize ?? params.pageSize ?? 10)),
+      },
+    };
   }
 
-  async deleteBlog(id: string): Promise<void> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
+  // 10. Delete Blog
+  async deleteBlog(id: number): Promise<{ success: boolean; message?: string }> {
+    console.log('📝 Deleting blog:', `${this.baseEndpoint}/delete/${id}`);
+    const response = await apiClient.post(`${this.baseEndpoint}/delete/${id}`);
+    console.log('📝 Delete blog response:', response);
+
+    if (!response.success) {
+      console.error('❌ Failed to delete blog:', response.error, response.message);
+      throw new Error(response.error || response.message || 'Failed to delete blog');
     }
 
-    await apiClient.delete(`${this.baseUrl}/${id}`);
-  }
-
-  async bulkDeleteBlogs(ids: string[]): Promise<void> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    await apiClient.delete(`${this.baseUrl}/bulk`, { data: { ids } });
-  }
-
-  async bulkUpdateBlogs(ids: string[], updates: Partial<Blog>): Promise<void> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    await apiClient.put(`${this.baseUrl}/bulk`, { ids, updates });
-  }
-
-  async getBlogStats(): Promise<BlogStats> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    const response = await apiClient.get(`${this.baseUrl}/stats`);
-    return response.data;
-  }
-
-  async getBlogAnalytics(id: string): Promise<BlogAnalytics> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    const response = await apiClient.get(`${this.baseUrl}/${id}/analytics`);
-    return response.data;
-  }
-
-  async publishBlog(id: string): Promise<Blog> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    const response = await apiClient.post(`${this.baseUrl}/${id}/publish`);
-    return response.data;
-  }
-
-  async unpublishBlog(id: string): Promise<Blog> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    const response = await apiClient.post(`${this.baseUrl}/${id}/unpublish`);
-    return response.data;
-  }
-
-  async getPopularBlogs(limit: number = 10): Promise<Blog[]> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    const response = await apiClient.get(`${this.baseUrl}/popular?limit=${limit}`);
-    return response.data;
-  }
-
-  async getRecentBlogs(limit: number = 10): Promise<Blog[]> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    const response = await apiClient.get(`${this.baseUrl}/recent?limit=${limit}`);
-    return response.data;
-  }
-
-  async searchBlogs(query: string, limit: number = 20): Promise<Blog[]> {
-    const config = clientConfigManager.getConfig();
-    if (!config.modules.blogs) {
-      throw new Error('Blog module is not enabled');
-    }
-
-    const response = await apiClient.get(`${this.baseUrl}/search?q=${encodeURIComponent(query)}&limit=${limit}`);
-    return response.data;
+    return {
+      success: true,
+      message: response.message || 'Blog deleted successfully',
+    };
   }
 }
 
 export const blogService = new BlogService();
+export default blogService;

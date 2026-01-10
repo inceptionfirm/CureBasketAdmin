@@ -4,19 +4,21 @@ import { AuthContextType, User, LoginResponse, RegisterData, RegisterResponse } 
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = (): AuthContextType => {
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+// Export hook first (function declaration for Fast Refresh compatibility)
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
-
-interface AuthProviderProps {
-  children: ReactNode;
 }
 
-export const AuthProvider = ({ children }: AuthProviderProps): React.JSX.Element => {
+// Export component as function declaration (not arrow function) for Fast Refresh
+export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -42,19 +44,35 @@ export const AuthProvider = ({ children }: AuthProviderProps): React.JSX.Element
     checkAuth();
   }, []);
 
-  const login = async (email: string, password: string): Promise<LoginResponse> => {
+  const login = async (email: string, password: string, rememberMe: boolean = false): Promise<LoginResponse> => {
     try {
       setLoading(true);
-      const result = await authService.login(email, password);
+      console.log('🔐 AuthContext: Starting login...');
+      const result = await authService.login(email, password, rememberMe);
       
-      if (result.success) {
+      console.log('🔐 AuthContext: Login result:', result);
+      
+      if (result.success && result.user) {
+        console.log('🔐 AuthContext: Setting user and authenticated state');
         setUser(result.user);
         setIsAuthenticated(true);
-        return { success: true, user: result.user };
+        
+        // Double-check that auth service confirms authentication
+        const isAuth = authService.isAuthenticated();
+        const userData = authService.getCurrentUser();
+        console.log('🔐 AuthContext: Auth service check:', { isAuth, userData });
+        
+        return { 
+          success: true, 
+          user: result.user,
+          redirectUrl: result.redirectUrl, // Pass through redirect URL
+        };
       }
-      return { success: false, error: result.error };
+      
+      console.error('🔐 AuthContext: Login failed - no user in result');
+      return { success: false, error: result.error || 'Login failed' };
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error('❌ AuthContext: Login exception:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     } finally {
       setLoading(false);
@@ -103,4 +121,4 @@ export const AuthProvider = ({ children }: AuthProviderProps): React.JSX.Element
       {children}
     </AuthContext.Provider>
   );
-};
+}

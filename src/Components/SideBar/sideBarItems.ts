@@ -43,5 +43,23 @@ const sideBarItems: SideBarItem[] = [
         key: "medicine",
         link: "/medicine"
     },
+    {
+        title: "Roles",
+        icon: "👤",
+        key: "roles",
+        link: "/roles"
+    },
+    {
+        title: "Permissions",
+        icon: "🔐",
+        key: "permissions",
+        link: "/permissions"
+    },
+    {
+        title: "Permission Groups",
+        icon: "📦",
+        key: "permission-groups",
+        link: "/permission-groups"
+    },
 ]
 export default sideBarItems;

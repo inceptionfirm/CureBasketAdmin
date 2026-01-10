@@ -1,9 +1,78 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocale } from '../../contexts/LocaleContext';
-import { prescriptionService, Prescription, PrescriptionStats } from '../../services/prescriptionService';
+import { prescriptionService, Prescription as ApiPrescription, PrescriptionStats } from '../../services/prescriptionService';
 import AddPrescriptionModal from './AddPrescriptionModal';
 import './Prescriptions.css';
 import '../../styles/global-buttons.css';
+
+// Local Prescription type for UI display (different from API Prescription type)
+interface Prescription {
+  id: string;
+  prescriptionNumber: string;
+  patientId: string;
+  patient: {
+    id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    dateOfBirth?: string;
+    address?: string;
+  };
+  doctorId: string;
+  doctor: {
+    id: string;
+    name: string;
+    licenseNumber?: string;
+    specialization?: string;
+    phone?: string;
+  };
+  medications: Array<{
+    id: string;
+    medicineId: string;
+    medicine: {
+      id: string;
+      name: string;
+      manufacturer?: string;
+      form?: string;
+    };
+    dosage?: string;
+    frequency?: string;
+    duration?: string;
+    quantity?: number;
+    instructions?: string;
+    refillsAllowed?: number;
+    refillsUsed?: number;
+  }>;
+  diagnosis: string;
+  symptoms: string[];
+  notes: string;
+  status: 'pending' | 'approved' | 'rejected' | 'dispensed' | 'expired';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  prescribedDate: string;
+  expiryDate: string;
+  dispensedDate?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  mainAttributes?: Array<{
+    id?: number;
+    name: string;
+    scale?: string | null;
+    value?: string;
+    subAttributes?: Array<{
+      id?: number;
+      name: string;
+      value: string;
+    }>;
+  }>;
+  patientName?: string;
+  doctorName?: string;
+  note?: string;
+}
 
 const Prescriptions: React.FC = () => {
   const { t } = useLocale();
@@ -26,182 +95,145 @@ const Prescriptions: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
 
+  // Helper function to map API prescription to UI format
+  const mapApiPrescriptionToUI = (apiPrescription: ApiPrescription | any): Prescription & { mainAttributes?: ApiPrescription['mainAttributes'] } => {
+    // Map status from API (PENDING, APPROVED, etc.) to UI format (pending, approved, etc.)
+    const statusMap: Record<string, 'pending' | 'approved' | 'rejected' | 'dispensed' | 'expired'> = {
+      'PENDING': 'pending',
+      'APPROVED': 'approved',
+      'REJECTED': 'rejected',
+      'DISPENSED': 'dispensed',
+      'EXPIRED': 'expired'
+    };
+    const status = statusMap[apiPrescription.status] || 'pending';
+    
+    // Map priority from API (HIGH, MEDIUM, LOW) to UI format (high, medium, low)
+    const priorityMap: Record<string, 'low' | 'medium' | 'high' | 'urgent'> = {
+      'LOW': 'low',
+      'MEDIUM': 'medium',
+      'HIGH': 'high'
+    };
+    const priority = priorityMap[apiPrescription.priority] || 'medium';
+    
+    // Extract medications from mainAttributes
+    let medications: Prescription['medications'] = [];
+    if (apiPrescription.mainAttributes && Array.isArray(apiPrescription.mainAttributes)) {
+      const medicinesAttr = apiPrescription.mainAttributes.find((attr: any) => 
+        attr.name && (attr.name.toLowerCase().includes('medicine') || attr.name.toLowerCase().includes('medication'))
+      );
+      if (medicinesAttr && medicinesAttr.subAttributes && Array.isArray(medicinesAttr.subAttributes)) {
+        medications = medicinesAttr.subAttributes.map((subAttr: any, index: number) => {
+          // Parse value like "500mg - Twice daily" or just use name and value
+          const valueParts = subAttr.value ? subAttr.value.split(' - ') : [];
+          return {
+            id: String(subAttr.id || index),
+            medicineId: String(subAttr.id || index),
+            medicine: {
+              id: String(subAttr.id || index),
+              name: subAttr.name || 'Unknown Medicine',
+              manufacturer: '',
+              form: ''
+            },
+            dosage: valueParts[0] || '',
+            frequency: valueParts[1] || '',
+            duration: '',
+            quantity: 0,
+            instructions: '',
+            refillsAllowed: 0,
+            refillsUsed: 0
+          };
+        });
+      }
+    }
+    
+    // Extract symptoms from mainAttributes
+    const symptoms = apiPrescription.mainAttributes && Array.isArray(apiPrescription.mainAttributes)
+      ? extractSymptomsFromMainAttributes(apiPrescription.mainAttributes)
+      : [];
+    
+    // Calculate expiry date (30 days from prescription date by default)
+    const prescriptionDate = apiPrescription.prescriptionDate ? new Date(apiPrescription.prescriptionDate) : new Date();
+    const expiryDate = new Date(prescriptionDate);
+    expiryDate.setDate(expiryDate.getDate() + 30); // Default 30 days
+    
+    return {
+      id: String(apiPrescription.id || ''),
+      prescriptionNumber: apiPrescription.prescriptionNumber || '',
+      patientId: apiPrescription.patientId || '',
+      mainAttributes: apiPrescription.mainAttributes || [],
+      patient: {
+        id: apiPrescription.patientId || '',
+        name: apiPrescription.patientName || 'Unknown Patient'
+      },
+      doctorId: apiPrescription.doctorId || '',
+      doctor: {
+        id: apiPrescription.doctorId || '',
+        name: apiPrescription.doctorName || 'Unknown Doctor'
+      },
+      medications: medications,
+      diagnosis: apiPrescription.diagnosis || '',
+      symptoms: symptoms, // Extracted from mainAttributes
+      notes: apiPrescription.note || '',
+      status: status,
+      priority: priority,
+      prescribedDate: apiPrescription.prescriptionDate || prescriptionDate.toISOString(),
+      expiryDate: expiryDate.toISOString(),
+      dispensedDate: status === 'dispensed' ? apiPrescription.updatedAt : undefined,
+      createdAt: apiPrescription.createdAt || new Date().toISOString(),
+      updatedAt: apiPrescription.updatedAt || apiPrescription.createdAt || new Date().toISOString()
+    } as Prescription & { mainAttributes?: ApiPrescription['mainAttributes'] };
+  };
+
   const loadPrescriptions = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Mock data for now - replace with actual API call later
-      const mockPrescriptions: Prescription[] = [
-        {
-          id: '1',
-          prescriptionNumber: 'RX-2024-001',
-          patientId: 'P001',
-          patient: {
-            id: 'P001',
-            name: 'John Smith',
-            email: 'john@example.com',
-            phone: '+1-555-0123',
-            dateOfBirth: '1985-03-15',
-            address: '123 Main St, City, State'
-          },
-          doctorId: 'D001',
-          doctor: {
-            id: 'D001',
-            name: 'Dr. Sarah Johnson',
-            licenseNumber: 'MD12345',
-            specialization: 'Internal Medicine',
-            phone: '+1-555-0456'
-          },
-          medications: [
-            {
-              id: '1',
-              medicineId: 'M001',
-              medicine: {
-                id: 'M001',
-                name: 'Amoxicillin',
-                manufacturer: 'PharmaCorp',
-                form: 'Capsule'
-              },
-              dosage: '500mg',
-              frequency: 'Twice daily',
-              duration: '7 days',
-              quantity: 14,
-              instructions: 'Take with food',
-              refillsAllowed: 1,
-              refillsUsed: 0
-            }
-          ],
-          diagnosis: 'Upper respiratory infection',
-          symptoms: ['cough', 'fever', 'congestion'],
-          notes: 'Patient reports symptoms for 3 days',
-          status: 'approved',
-          priority: 'medium',
-          prescribedDate: '2024-01-15T10:00:00Z',
-          expiryDate: '2024-02-15T10:00:00Z',
-          dispensedDate: '2024-01-15T14:30:00Z',
-          createdAt: '2024-01-15T10:00:00Z',
-          updatedAt: '2024-01-15T14:30:00Z',
-          createdBy: {
-            id: '1',
-            name: 'Admin User',
-            email: 'admin@example.com'
-          }
-        },
-        {
-          id: '2',
-          prescriptionNumber: 'RX-2024-002',
-          patientId: 'P002',
-          patient: {
-            id: 'P002',
-            name: 'Jane Doe',
-            email: 'jane@example.com',
-            phone: '+1-555-0789',
-            dateOfBirth: '1990-07-22',
-            address: '456 Oak Ave, City, State'
-          },
-          doctorId: 'D002',
-          doctor: {
-            id: 'D002',
-            name: 'Dr. Michael Chen',
-            licenseNumber: 'MD67890',
-            specialization: 'Cardiology',
-            phone: '+1-555-0321'
-          },
-          medications: [
-            {
-              id: '2',
-              medicineId: 'M002',
-              medicine: {
-                id: 'M002',
-                name: 'Lisinopril',
-                manufacturer: 'MediPharm',
-                form: 'Tablet'
-              },
-              dosage: '10mg',
-              frequency: 'Once daily',
-              duration: '30 days',
-              quantity: 30,
-              instructions: 'Take in the morning',
-              refillsAllowed: 2,
-              refillsUsed: 0
-            }
-          ],
-          diagnosis: 'Hypertension',
-          symptoms: ['high blood pressure', 'headaches'],
-          notes: 'Regular follow-up required',
-          status: 'pending',
-          priority: 'high',
-          prescribedDate: '2024-01-20T09:15:00Z',
-          expiryDate: '2024-02-20T09:15:00Z',
-          createdAt: '2024-01-20T09:15:00Z',
-          updatedAt: '2024-01-20T09:15:00Z',
-          createdBy: {
-            id: '1',
-            name: 'Admin User',
-            email: 'admin@example.com'
-          }
-        },
-        {
-          id: '3',
-          prescriptionNumber: 'RX-2024-003',
-          patientId: 'P003',
-          patient: {
-            id: 'P003',
-            name: 'Robert Wilson',
-            email: 'robert@example.com',
-            phone: '+1-555-0654',
-            dateOfBirth: '1978-11-08',
-            address: '789 Pine St, City, State'
-          },
-          doctorId: 'D001',
-          doctor: {
-            id: 'D001',
-            name: 'Dr. Sarah Johnson',
-            licenseNumber: 'MD12345',
-            specialization: 'Internal Medicine',
-            phone: '+1-555-0456'
-          },
-          medications: [
-            {
-              id: '3',
-              medicineId: 'M003',
-              medicine: {
-                id: 'M003',
-                name: 'Ibuprofen',
-                manufacturer: 'PainRelief Inc',
-                form: 'Tablet'
-              },
-              dosage: '400mg',
-              frequency: 'Three times daily',
-              duration: '5 days',
-              quantity: 15,
-              instructions: 'Take with food to avoid stomach upset',
-              refillsAllowed: 0,
-              refillsUsed: 0
-            }
-          ],
-          diagnosis: 'Muscle strain',
-          symptoms: ['muscle pain', 'inflammation'],
-          notes: 'Rest and ice recommended',
-          status: 'dispensed',
-          priority: 'low',
-          prescribedDate: '2024-01-18T16:45:00Z',
-          expiryDate: '2024-02-18T16:45:00Z',
-          dispensedDate: '2024-01-18T17:00:00Z',
-          createdAt: '2024-01-18T16:45:00Z',
-          updatedAt: '2024-01-18T17:00:00Z',
-          createdBy: {
-            id: '2',
-            name: 'Pharmacy Staff',
-            email: 'pharmacy@example.com'
-          }
-        }
-      ];
+      console.log('💊 Loading prescriptions from API...');
       
-      setPrescriptions(mockPrescriptions);
+      // Build query parameters
+      // Note: Backend only allows these sortBy values: ID, ItemType, PrescriptionNumber, PatientName, PatientId, DoctorName, DoctorId, Note, Diagnosis, Status, Priority
+      const params: any = {
+        itemType: 'PRESCRIPTION',
+        page: 0,
+        pageSize: 100,
+        sortBy: 'ID', // Changed from 'prescriptionDate' - backend doesn't support it
+        sortOrder: 'DESC'
+      };
+      
+      // Add filters if provided
+      if (statusFilter) {
+        const statusMap: Record<string, string> = {
+          'pending': 'PENDING',
+          'approved': 'APPROVED',
+          'rejected': 'REJECTED',
+          'dispensed': 'DISPENSED',
+          'expired': 'EXPIRED'
+        };
+        params.status = statusMap[statusFilter] || statusFilter.toUpperCase();
+      }
+      if (priorityFilter) {
+        const priorityMap: Record<string, string> = {
+          'low': 'LOW',
+          'medium': 'MEDIUM',
+          'high': 'HIGH'
+        };
+        params.priority = priorityMap[priorityFilter] || priorityFilter.toUpperCase();
+      }
+      
+      // Call the API
+      const response = await prescriptionService.getAllPrescriptions(params);
+      console.log('💊 Prescriptions API response:', response);
+      
+      // Map API response to UI format
+      const mappedPrescriptions: Prescription[] = (response.prescriptions || []).map(mapApiPrescriptionToUI);
+      
+      console.log('💊 Mapped prescriptions:', mappedPrescriptions);
+      setPrescriptions(mappedPrescriptions);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load prescriptions');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load prescriptions';
+      console.error('❌ Error loading prescriptions:', err);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -209,20 +241,74 @@ const Prescriptions: React.FC = () => {
 
   const loadStats = useCallback(async () => {
     try {
-      // Mock stats for now - replace with actual API call later
-      const mockStats: PrescriptionStats = {
-        totalPrescriptions: 3,
-        pendingPrescriptions: 1,
-        approvedPrescriptions: 1,
-        dispensedPrescriptions: 1,
-        expiredPrescriptions: 0,
-        urgentPrescriptions: 1,
-        totalMedications: 3,
-        averageProcessingTime: 2.5
+      // Fetch all prescriptions to calculate stats dynamically
+      const response = await prescriptionService.getAllPrescriptions({
+        itemType: 'PRESCRIPTION',
+        page: 0,
+        pageSize: 1000, // Fetch large batch to calculate accurate stats
+        sortBy: 'ID',
+        sortOrder: 'DESC'
+      });
+
+      const prescriptionsList = response.prescriptions || [];
+      const totalPrescriptions = response.pagination?.total || prescriptionsList.length;
+
+      // Calculate status counts
+      let pendingPrescriptions = 0;
+      let approvedPrescriptions = 0;
+      let dispensedPrescriptions = 0;
+      let expiredPrescriptions = 0;
+      let urgentPrescriptions = 0;
+      let totalMedications = 0;
+
+      prescriptionsList.forEach((prescription: any) => {
+        const status = prescription.status?.toUpperCase() || 'PENDING';
+        if (status === 'PENDING') pendingPrescriptions++;
+        else if (status === 'APPROVED') approvedPrescriptions++;
+        else if (status === 'DISPENSED') dispensedPrescriptions++;
+        else if (status === 'EXPIRED') expiredPrescriptions++;
+
+        const priority = prescription.priority?.toUpperCase() || 'MEDIUM';
+        if (priority === 'HIGH' || priority === 'URGENT') urgentPrescriptions++;
+
+        // Count medications from mainAttributes
+        // Medications are stored as mainAttributes with names like "Medication 1", "Medication 2", etc.
+        if (prescription.mainAttributes && Array.isArray(prescription.mainAttributes)) {
+          prescription.mainAttributes.forEach((attr: any) => {
+            if (attr.name && (attr.name.toLowerCase().includes('medicine') || attr.name.toLowerCase().includes('medication'))) {
+              // Count each medication mainAttribute as 1 medication
+              totalMedications += 1;
+            }
+          });
+        }
+      });
+
+      const calculatedStats: PrescriptionStats = {
+        totalPrescriptions,
+        pendingPrescriptions,
+        approvedPrescriptions,
+        dispensedPrescriptions,
+        expiredPrescriptions,
+        urgentPrescriptions,
+        totalMedications,
+        averageProcessingTime: 0 // Can be calculated if needed
       };
-      setStats(mockStats);
+
+      console.log('📊 Prescription Stats Calculated:', calculatedStats);
+      setStats(calculatedStats);
     } catch (err) {
       console.error('Failed to load prescription stats:', err);
+      // Set default values on error
+      setStats({
+        totalPrescriptions: 0,
+        pendingPrescriptions: 0,
+        approvedPrescriptions: 0,
+        dispensedPrescriptions: 0,
+        expiredPrescriptions: 0,
+        urgentPrescriptions: 0,
+        totalMedications: 0,
+        averageProcessingTime: 0
+      });
     }
   }, []);
 
@@ -231,33 +317,340 @@ const Prescriptions: React.FC = () => {
     loadStats();
   }, [loadPrescriptions, loadStats]);
 
+  // Helper function to map symptoms to mainAttributes structure
+  const mapSymptomsToMainAttributes = (symptoms: string[]): any[] => {
+    if (!symptoms || symptoms.length === 0) {
+      return [];
+    }
+    
+    // Store symptoms as a single mainAttribute with subAttributes for each symptom
+    return [{
+      name: 'Symptoms',
+      value: symptoms.join(', '), // Combined value
+      scale: null,
+      subAttributes: symptoms.map((symptom, index) => ({
+        name: `Symptom ${index + 1}`,
+        value: symptom
+      }))
+    }];
+  };
+
+  // Helper function to extract symptoms from mainAttributes
+  const extractSymptomsFromMainAttributes = (mainAttributes: any[]): string[] => {
+    if (!mainAttributes || !Array.isArray(mainAttributes)) {
+      return [];
+    }
+    
+    const symptomsAttr = mainAttributes.find((attr: any) => 
+      attr.name && attr.name.toLowerCase().includes('symptom')
+    );
+    
+    if (symptomsAttr && symptomsAttr.subAttributes && Array.isArray(symptomsAttr.subAttributes)) {
+      return symptomsAttr.subAttributes.map((subAttr: any) => subAttr.value || '').filter(Boolean);
+    }
+    
+    // Fallback: try to extract from value if it's a comma-separated string
+    if (symptomsAttr && symptomsAttr.value) {
+      return symptomsAttr.value.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+    
+    return [];
+  };
+
+  // Helper function to map form medications to mainAttributes structure
+  // Matches curl structure: { name: "Medication 1", value: "paracetamol", scale: null, subAttributes: [...] }
+  const mapMedicationsToMainAttributes = (medications: any[]): any[] => {
+    if (!medications || medications.length === 0) {
+      return [];
+    }
+    
+    return medications.map((med, index) => {
+      const subAttributes: any[] = [];
+      
+      // Add Frequency if present
+      if (med.frequency && med.frequency.trim()) {
+        subAttributes.push({
+          name: 'Frequency',
+          value: med.frequency.trim()
+        });
+      }
+      
+      // Add Duration if present
+      if (med.duration && med.duration.trim()) {
+        subAttributes.push({
+          name: 'Duration',
+          value: med.duration.trim()
+        });
+      }
+      
+      // Add Dosage if present
+      if (med.dosage && med.dosage.trim()) {
+        subAttributes.push({
+          name: 'Dosage',
+          value: med.dosage.trim()
+        });
+      }
+      
+      // Add Refills Allowed if present
+      if (med.refillsAllowed !== undefined && med.refillsAllowed !== null) {
+        // Format refills: if it's a number, convert to string; if it's a string, use as is
+        let refillsValue = String(med.refillsAllowed);
+        if (med.refillsAllowed === 0) {
+          refillsValue = 'No: only monthly'; // Default format from curl example
+        }
+        subAttributes.push({
+          name: 'Refills Allowed',
+          value: refillsValue
+        });
+      }
+      
+      // Add Quantity if present
+      if (med.quantity !== undefined && med.quantity !== null) {
+        subAttributes.push({
+          name: 'Quantity',
+          value: String(med.quantity)
+        });
+      }
+      
+      // Get medicine name: use med.name, med.medicine?.name, or med.medicineId as fallback
+      const medicineName = med.name || med.medicine?.name || med.medicineId || `Medicine ${index + 1}`;
+      
+      return {
+        name: `Medication ${index + 1}`, // Label like "Medication 1", "Medication 2"
+        value: medicineName, // Actual medicine name (paracetamol, crosin, etc.)
+        scale: null,
+        subAttributes: subAttributes.length > 0 ? subAttributes : []
+      };
+    });
+  };
+
   const handleAddPrescription = async (prescriptionData: any) => {
     try {
-      // Mock implementation - replace with actual API call later
-      console.log('Adding prescription:', prescriptionData);
+      setError(null);
+      
+      // Map form data to API format
+      const statusMap: Record<string, 'PENDING' | 'APPROVED' | 'REJECTED' | 'DISPENSED' | 'EXPIRED'> = {
+        'pending': 'PENDING',
+        'approved': 'APPROVED',
+        'rejected': 'REJECTED',
+        'dispensed': 'DISPENSED',
+        'expired': 'EXPIRED'
+      };
+      
+      const priorityMap: Record<string, 'HIGH' | 'MEDIUM' | 'LOW'> = {
+        'low': 'LOW',
+        'medium': 'MEDIUM',
+        'high': 'HIGH'
+      };
+      
+      // Use mainAttributes directly from form data (dynamic approach)
+      const mainAttributes = prescriptionData.mainAttributes && prescriptionData.mainAttributes.length > 0
+        ? prescriptionData.mainAttributes
+        : undefined;
+      
+      if (editingPrescription) {
+        console.log('💊 Updating prescription, form data:', prescriptionData);
+        // For update: build payload with only fields that are being updated
+        // API accepts single field or all fields at once
+        const updatePayload: any = {};
+        
+        // Prescription number
+        if (prescriptionData.prescriptionNumber !== undefined && prescriptionData.prescriptionNumber !== null && prescriptionData.prescriptionNumber !== '') {
+          updatePayload.prescriptionNumber = prescriptionData.prescriptionNumber;
+        }
+        
+        // Patient name - only if explicitly provided in form
+        if (prescriptionData.patientName !== undefined && prescriptionData.patientName !== null && prescriptionData.patientName !== '') {
+          updatePayload.patientName = prescriptionData.patientName;
+        }
+        
+        // Patient ID - can be empty string, only if provided
+        if (prescriptionData.patientId !== undefined && prescriptionData.patientId !== null) {
+          updatePayload.patientId = prescriptionData.patientId || '';
+        }
+        
+        // Doctor name - only if explicitly provided in form
+        if (prescriptionData.doctorName !== undefined && prescriptionData.doctorName !== null && prescriptionData.doctorName !== '') {
+          updatePayload.doctorName = prescriptionData.doctorName;
+        }
+        
+        // Doctor ID - can be empty string, only if provided
+        if (prescriptionData.doctorId !== undefined && prescriptionData.doctorId !== null) {
+          updatePayload.doctorId = prescriptionData.doctorId || '';
+        }
+        
+        // Note - can be empty string
+        if ('note' in prescriptionData || 'notes' in prescriptionData) {
+          updatePayload.note = prescriptionData.notes || prescriptionData.note || '';
+        }
+        
+        // Diagnosis - can be empty string
+        if ('diagnosis' in prescriptionData) {
+          updatePayload.diagnosis = prescriptionData.diagnosis || '';
+        }
+        
+        // Status
+        if (prescriptionData.status !== undefined && prescriptionData.status !== null && prescriptionData.status !== '') {
+          updatePayload.status = statusMap[prescriptionData.status.toLowerCase()] || 'PENDING';
+        }
+        
+        // Priority
+        if (prescriptionData.priority !== undefined && prescriptionData.priority !== null && prescriptionData.priority !== '') {
+          updatePayload.priority = priorityMap[prescriptionData.priority.toLowerCase()] || 'MEDIUM';
+        }
+        
+        // PrescriptionDate - if provided, send in ISO 8601 format
+        if (prescriptionData.prescribedDate && prescriptionData.prescribedDate.trim()) {
+          // Handle date input format (YYYY-MM-DD) by appending time to ensure correct parsing
+          const dateStr = prescriptionData.prescribedDate.includes('T') 
+            ? prescriptionData.prescribedDate 
+            : `${prescriptionData.prescribedDate}T00:00:00`;
+          const date = new Date(dateStr);
+          if (!isNaN(date.getTime())) {
+            updatePayload.prescriptionDate = date.toISOString();
+          } else {
+            console.warn('Invalid prescribedDate format:', prescriptionData.prescribedDate);
+          }
+        }
+        
+        // ExpiryDate - if provided, send in ISO 8601 format
+        // Note: Backend may or may not accept this field - adding it if provided in form
+        if (prescriptionData.expiryDate && prescriptionData.expiryDate.trim()) {
+          // Handle date input format (YYYY-MM-DD) by appending time to ensure correct parsing
+          const dateStr = prescriptionData.expiryDate.includes('T') 
+            ? prescriptionData.expiryDate 
+            : `${prescriptionData.expiryDate}T00:00:00`;
+          const expiryDate = new Date(dateStr);
+          if (!isNaN(expiryDate.getTime())) {
+            updatePayload.expiryDate = expiryDate.toISOString();
+          } else {
+            console.warn('Invalid expiryDate format:', prescriptionData.expiryDate);
+          }
+        }
+        
+        // MainAttributes - always send if they exist (even if empty array, to update the list)
+        // This ensures medications are properly updated
+        if (mainAttributes !== undefined) {
+          updatePayload.mainAttributes = mainAttributes;
+          console.log('💊 Update Prescription - mainAttributes being sent:', JSON.stringify(mainAttributes, null, 2));
+        }
+        
+        if (Object.keys(updatePayload).length === 0) {
+          throw new Error('No fields to update');
+        }
+        
+        console.log('💊 Prescription Update Payload:', JSON.stringify(updatePayload, null, 2));
+        await prescriptionService.updatePrescription(Number(editingPrescription.id), updatePayload);
+      } else {
+        // For create: send all required fields matching curl structure exactly
+        const createPayload: any = {
+          prescriptionNumber: prescriptionData.prescriptionNumber,
+          itemType: 'PRESCRIPTION',
+          patientName: prescriptionData.patientName || 
+                       (prescriptionData.patient?.name) || 
+                       'Patient',
+          patientId: prescriptionData.patientId || '',
+          doctorName: prescriptionData.doctorName || 
+                      (prescriptionData.doctor?.name) || 
+                      'Doctor',
+          doctorId: prescriptionData.doctorId || '',
+          note: prescriptionData.notes || prescriptionData.note || '',
+          diagnosis: prescriptionData.diagnosis || '',
+          status: (statusMap[prescriptionData.status?.toLowerCase()] || 'PENDING') as 'PENDING' | 'APPROVED' | 'REJECTED' | 'DISPENSED' | 'EXPIRED',
+          priority: (priorityMap[prescriptionData.priority?.toLowerCase()] || 'MEDIUM') as 'HIGH' | 'MEDIUM' | 'LOW'
+        };
+        
+        // Add prescriptionDate if provided (ISO 8601 format)
+        if (prescriptionData.prescribedDate && prescriptionData.prescribedDate.trim()) {
+          // Handle date input format (YYYY-MM-DD) by appending time to ensure correct parsing
+          const dateStr = prescriptionData.prescribedDate.includes('T') 
+            ? prescriptionData.prescribedDate 
+            : `${prescriptionData.prescribedDate}T00:00:00`;
+          const date = new Date(dateStr);
+          if (!isNaN(date.getTime())) {
+            createPayload.prescriptionDate = date.toISOString();
+          } else {
+            console.warn('Invalid prescribedDate format:', prescriptionData.prescribedDate);
+          }
+        }
+        
+        // Add expiryDate if provided (ISO 8601 format)
+        // Note: Backend may or may not accept this field - adding it if provided in form
+        if (prescriptionData.expiryDate && prescriptionData.expiryDate.trim()) {
+          // Handle date input format (YYYY-MM-DD) by appending time to ensure correct parsing
+          const dateStr = prescriptionData.expiryDate.includes('T') 
+            ? prescriptionData.expiryDate 
+            : `${prescriptionData.expiryDate}T00:00:00`;
+          const expiryDate = new Date(dateStr);
+          if (!isNaN(expiryDate.getTime())) {
+            createPayload.expiryDate = expiryDate.toISOString();
+          } else {
+            console.warn('Invalid expiryDate format:', prescriptionData.expiryDate);
+          }
+        }
+        
+        // Add mainAttributes if they exist
+        if (mainAttributes && mainAttributes.length > 0) {
+          createPayload.mainAttributes = mainAttributes;
+          console.log('💊 Create Prescription - mainAttributes being sent:', JSON.stringify(mainAttributes, null, 2));
+        } else {
+          console.log('💊 Create Prescription - No mainAttributes');
+        }
+        
+        console.log('💊 Create Prescription - Full Payload:', JSON.stringify(createPayload, null, 2));
+        await prescriptionService.createPrescription(createPayload);
+      }
+      
       await loadPrescriptions();
       await loadStats();
       setIsAddPrescriptionModalOpen(false);
       setEditingPrescription(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save prescription');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save prescription';
+      console.error('❌ Error saving prescription:', err);
+      setError(errorMessage);
     }
   };
 
-  const handleEditPrescription = (prescription: Prescription) => {
+  const handleEditPrescription = async (prescription: Prescription) => {
+    try {
+      setError(null);
+      setLoading(true);
+      console.log('💊 Fetching full prescription details for edit, ID:', prescription.id);
+      
+      // Fetch full prescription details from API using getById
+      const fullPrescriptionDetails = await prescriptionService.getPrescriptionById(Number(prescription.id));
+      console.log('💊 Full prescription details fetched:', fullPrescriptionDetails);
+      
+      // Map API prescription to UI format
+      const mappedPrescription = mapApiPrescriptionToUI(fullPrescriptionDetails);
+      console.log('💊 Mapped prescription for edit:', mappedPrescription);
+      
+      setEditingPrescription(mappedPrescription);
+      setIsAddPrescriptionModalOpen(true);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load prescription details';
+      console.error('❌ Error fetching prescription details:', err);
+      setError(errorMessage);
+      // Fallback: use the prescription from the list if API call fails
     setEditingPrescription(prescription);
     setIsAddPrescriptionModalOpen(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeletePrescription = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this prescription?')) {
       try {
-        // Mock implementation - replace with actual API call later
-        console.log('Deleting prescription:', id);
+        setError(null);
+        await prescriptionService.deletePrescription(Number(id));
         await loadPrescriptions();
         await loadStats();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to delete prescription');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to delete prescription';
+        console.error('❌ Error deleting prescription:', err);
+        setError(errorMessage);
       }
     }
   };
@@ -351,10 +744,7 @@ const Prescriptions: React.FC = () => {
   return (
     <div className="prescriptions-page">
       <div className="page-header">
-        <div className="header-content">
           <h1 className="page-title">Prescriptions</h1>
-          <p className="page-description">Manage patient prescriptions and medication orders</p>
-        </div>
         <button
           className="add-button"
           onClick={() => setIsAddPrescriptionModalOpen(true)}
@@ -499,42 +889,111 @@ const Prescriptions: React.FC = () => {
                 </div>
 
                 <div className="prescription-details">
-                  <div className="detail-row">
-                    <div className="detail-group">
-                      <span className="detail-label">Patient:</span>
-                      <span className="detail-value">{prescription.patient.name}</span>
-                    </div>
-                    <div className="detail-group">
-                      <span className="detail-label">Doctor:</span>
-                      <span className="detail-value">{prescription.doctor.name}</span>
-                    </div>
-                  </div>
-
-                  <div className="detail-row">
-                    <div className="detail-group">
-                      <span className="detail-label">Diagnosis:</span>
-                      <span className="detail-value">{prescription.diagnosis}</span>
-                    </div>
-                    <div className="detail-group">
-                      <span className="detail-label">Medications:</span>
-                      <span className="detail-value">{prescription.medications.length} medication(s)</span>
-                    </div>
-                  </div>
-
-                  <div className="detail-row">
-                    <div className="detail-group">
-                      <span className="detail-label">Prescribed:</span>
-                      <span className="detail-value">{formatDate(prescription.prescribedDate)}</span>
-                    </div>
-                    <div className="detail-group">
-                      <span className="detail-label">Expires:</span>
-                      <span className="detail-value">{formatDate(prescription.expiryDate)}</span>
-                    </div>
-                  </div>
-
-                  {prescription.symptoms.length > 0 && (
-                    <div className="symptoms-section">
-                      <span className="detail-label">Symptoms:</span>
+                  <table className="prescription-details-table">
+                    <tbody>
+                      {/* Patient - only show if exists */}
+                      {(prescription.patient?.name || prescription.patientName) && (
+                        <tr>
+                          <td className="detail-label">Patient:</td>
+                          <td className="detail-value">{prescription.patient?.name || prescription.patientName}</td>
+                          {/* Doctor - only show if exists */}
+                          {(prescription.doctor?.name || prescription.doctorName) && (
+                            <>
+                              <td className="detail-label">Doctor:</td>
+                              <td className="detail-value">{prescription.doctor?.name || prescription.doctorName}</td>
+                            </>
+                          )}
+                        </tr>
+                      )}
+                      
+                      {/* If only Doctor exists (no Patient), show it alone */}
+                      {!(prescription.patient?.name || prescription.patientName) && (prescription.doctor?.name || prescription.doctorName) && (
+                        <tr>
+                          <td className="detail-label">Doctor:</td>
+                          <td className="detail-value" colSpan={3}>{prescription.doctor?.name || prescription.doctorName}</td>
+                        </tr>
+                      )}
+                      
+                      {/* Prescription Number - always show */}
+                      <tr>
+                        <td className="detail-label">Prescription #:</td>
+                        <td className="detail-value">{prescription.prescriptionNumber}</td>
+                        {/* Status - always show */}
+                        <td className="detail-label">Status:</td>
+                        <td className="detail-value" style={{ textTransform: 'capitalize' }}>{prescription.status}</td>
+                      </tr>
+                      
+                      {/* Diagnosis - only show if exists */}
+                      {prescription.diagnosis && (
+                        <tr>
+                          <td className="detail-label">Diagnosis:</td>
+                          <td className="detail-value">{prescription.diagnosis}</td>
+                          {/* Medications count */}
+                          {(() => {
+                            const medicationCount = prescription.mainAttributes 
+                              ? prescription.mainAttributes.filter(attr => 
+                                  attr.name && (attr.name.toLowerCase().startsWith('medication') || attr.name.toLowerCase().includes('medicine'))
+                                ).length
+                              : prescription.medications.length;
+                            if (medicationCount > 0) {
+                              return (
+                                <>
+                                  <td className="detail-label">Medications:</td>
+                                  <td className="detail-value">{medicationCount} medication{medicationCount !== 1 ? 's' : ''}</td>
+                                </>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </tr>
+                      )}
+                      
+                      {/* Medications - show alone if no diagnosis */}
+                      {!prescription.diagnosis && (() => {
+                        const medicationCount = prescription.mainAttributes 
+                          ? prescription.mainAttributes.filter(attr => 
+                              attr.name && (attr.name.toLowerCase().startsWith('medication') || attr.name.toLowerCase().includes('medicine'))
+                            ).length
+                          : prescription.medications.length;
+                        if (medicationCount > 0) {
+                          return (
+                            <tr>
+                              <td className="detail-label">Medications:</td>
+                              <td className="detail-value" colSpan={3}>{medicationCount} medication{medicationCount !== 1 ? 's' : ''}</td>
+                            </tr>
+                          );
+                        }
+                        return null;
+                      })()}
+                      
+                      {/* Prescribed Date - only show if exists */}
+                      {prescription.prescribedDate && (
+                        <tr>
+                          <td className="detail-label">Prescribed:</td>
+                          <td className="detail-value">{formatDate(prescription.prescribedDate)}</td>
+                          {/* Expiry Date - only show if exists */}
+                          {prescription.expiryDate && (
+                            <>
+                              <td className="detail-label">Expires:</td>
+                              <td className="detail-value">{formatDate(prescription.expiryDate)}</td>
+                            </>
+                          )}
+                        </tr>
+                      )}
+                      
+                      {/* Expiry Date alone if no Prescribed Date */}
+                      {!prescription.prescribedDate && prescription.expiryDate && (
+                        <tr>
+                          <td className="detail-label">Expires:</td>
+                          <td className="detail-value" colSpan={3}>{formatDate(prescription.expiryDate)}</td>
+                        </tr>
+                      )}
+                      
+                      {/* Symptoms - only show if exists */}
+                      {prescription.symptoms && prescription.symptoms.length > 0 && (
+                        <tr>
+                          <td className="detail-label">Symptoms:</td>
+                          <td className="detail-value" colSpan={3}>
                       <div className="symptoms-list">
                         {prescription.symptoms.map((symptom, index) => (
                           <span key={index} className="symptom-tag">
@@ -542,15 +1001,19 @@ const Prescriptions: React.FC = () => {
                           </span>
                         ))}
                       </div>
-                    </div>
-                  )}
-
-                  {prescription.notes && (
-                    <div className="notes-section">
-                      <span className="detail-label">Notes:</span>
-                      <span className="detail-value">{prescription.notes}</span>
-                    </div>
-                  )}
+                          </td>
+                        </tr>
+                      )}
+                      
+                      {/* Notes - only show if exists */}
+                      {(prescription.notes || prescription.note) && (
+                        <tr>
+                          <td className="detail-label">Notes:</td>
+                          <td className="detail-value" colSpan={3}>{prescription.notes || prescription.note}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             ))}

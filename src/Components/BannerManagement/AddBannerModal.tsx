@@ -1,7 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useLocale } from '../../contexts/LocaleContext';
-import { Banner } from '../../services/bannerService';
 import './AddBannerModal.css';
+
+// Local Banner type for UI (matches BannerManagement component)
+interface Banner {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  imageAlt: string;
+  linkUrl: string;
+  linkText: string;
+  position: 'top' | 'middle' | 'bottom' | 'sidebar' | 'popup';
+  type: 'hero' | 'promotional' | 'announcement' | 'advertisement' | 'notification';
+  status: 'active' | 'inactive' | 'scheduled' | 'expired';
+  priority: number;
+  startDate: string;
+  endDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 interface AddBannerModalProps {
   isOpen: boolean;

@@ -97,6 +97,7 @@ class SidebarService {
         return this.cache;
       }
 
+      // Try mock API first (for development/testing)
       try {
         const data = await mockSidebarApi.getSidebarConfig();
         
@@ -109,33 +110,45 @@ class SidebarService {
           this.lastFetch = Date.now();
           return this.cache;
         }
-      } catch (apiError) {
-        const response = await fetch('/api/sidebar/config', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-          }
-        });
+      } catch (mockError) {
+        // Mock API failed, continue to try real API
+        console.debug('Mock sidebar API not available, trying real API');
+      }
 
-        if (response.ok) {
-          const data = await response.json();
+      // Try real API (endpoint doesn't exist yet, so this will fail gracefully)
+      // Using apiClient would be better, but for now we'll just skip it
+      // and return default config to avoid 404 errors
+      
+      // Note: Sidebar config endpoint doesn't exist on backend yet
+      // When it's available, uncomment this section:
+      /*
+      try {
+        const { apiClient } = await import('./apiClient');
+        const response = await apiClient.get('/sidebar/config');
           
-          if (this.validateSidebarConfig(data)) {
+        if (response.success && this.validateSidebarConfig(response.data)) {
             this.cache = {
-              menuItems: data.menuItems || [],
-              userPermissions: data.userPermissions || [],
+            menuItems: response.data.menuItems || [],
+            userPermissions: response.data.userPermissions || [],
               lastUpdated: new Date().toISOString()
             };
             this.lastFetch = Date.now();
             return this.cache;
           }
-        }
+      } catch (apiError) {
+        // API endpoint doesn't exist - use default config
+        console.debug('Sidebar config endpoint not available, using default config');
       }
+      */
 
-      return this.getDefaultConfig();
+      // Return default config (endpoint doesn't exist yet)
+      const defaultConfig = this.getDefaultConfig();
+      this.cache = defaultConfig;
+      this.lastFetch = Date.now();
+      return defaultConfig;
 
     } catch (error) {
+      console.warn('Error fetching sidebar config, using default:', error);
       return this.getDefaultConfig();
     }
   }

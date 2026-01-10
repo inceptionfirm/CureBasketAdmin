@@ -1,10 +1,13 @@
 // User types
+export type UserRole = 'superadmin' | 'admin' | 'demo' | 'user';
+
 export interface User {
-  id: number;
+  id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user' | 'demo';
-  avatar: string;
+  role: UserRole;
+  avatar?: string | null;
+  permissions?: string[];
 }
 
 // Authentication types
@@ -23,7 +26,9 @@ export interface LoginCredentials {
 export interface LoginResponse {
   success: boolean;
   user?: User;
+  token?: string;
   error?: string;
+  redirectUrl?: string; // Optional redirect URL from backend
 }
 
 export interface RegisterData {
@@ -109,7 +114,7 @@ export interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   loading: boolean;
-  login: (email: string, password: string) => Promise<LoginResponse>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<LoginResponse>;
   logout: () => Promise<{ success: boolean; error?: string }>;
   register: (userData: RegisterData) => Promise<RegisterResponse>;
 }

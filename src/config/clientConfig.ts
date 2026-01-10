@@ -164,8 +164,9 @@ export const DEFAULT_CLIENT_CONFIG: ClientConfig = {
     reports: true,
   },
   api: {
-    baseURL: 'https://api.curebasket.com',
-    version: 'v1',
+    // Always use the actual backend URL
+    baseURL: 'https://java.api.curebasket.com/backend',
+    version: '',
     endpoints: {
       auth: '/auth',
       products: '/products',
@@ -282,7 +283,10 @@ class ClientConfigManager {
 
   // Get API endpoint
   getAPIEndpoint(endpoint: keyof ClientAPI['endpoints']): string {
-    return `${this.config.api.baseURL}/${this.config.api.version}${this.config.api.endpoints[endpoint]}`;
+    const base = this.config.api.baseURL.replace(/\/+$/, '');
+    const version = (this.config.api.version || '').replace(/^\/+|\/+$/g, '');
+    const prefix = version ? `${base}/${version}` : base;
+    return `${prefix}${this.config.api.endpoints[endpoint]}`;
   }
 
   // Subscribe to configuration changes

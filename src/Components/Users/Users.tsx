@@ -1,31 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocale } from '../../contexts/LocaleContext';
-import { User, UserStats } from '../../services/userService';
+import { User, UserStats, userService } from '../../services/userService';
+import { useAuth } from '../../contexts/AuthContext';
 import AddUserModal from './AddUserModal';
 import DataTable, { TableColumn } from '../core/DataTable';
+import businessService, { BusinessPayload } from '../../services/businessService';
 import './Users.css';
-
-interface UserFormData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  role: string;
-  department: string;
-  status: 'active' | 'inactive';
-  dateOfBirth: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  country: string;
-  emergencyContact: string;
-  emergencyPhone: string;
-  notes: string;
-}
 
 const Users: React.FC = () => {
   const { t, formatNumber } = useLocale();
+  const { user: currentUser } = useAuth();
   
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
@@ -35,7 +19,6 @@ const Users: React.FC = () => {
     totalUsers: 0,
     activeUsers: 0,
     newThisMonth: 0,
-    totalDepartments: 0,
     recentLogins: 0
   });
   const [pagination, setPagination] = useState({
@@ -62,98 +45,68 @@ const Users: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Static data for development - no API calls needed
-      const mockUsers: User[] = [
-        {
-          id: '1',
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john.doe@example.com',
-          phone: '+1-555-0123',
-          role: 'Admin',
-          department: 'IT',
-          status: 'active',
-          profileImage: '',
-          lastLogin: '2024-01-20T10:30:00Z',
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-20T10:30:00Z',
-          dateOfBirth: '1990-01-01',
-          address: '123 Main St',
-          city: 'New York',
-          state: 'NY',
-          zipCode: '10001',
-          country: 'USA',
-          emergencyContact: 'Jane Doe',
-          emergencyPhone: '+1-555-0124',
-          notes: 'Admin user'
-        },
-        {
-          id: '2',
-          firstName: 'Jane',
-          lastName: 'Smith',
-          email: 'jane.smith@example.com',
-          phone: '+1-555-0124',
-          role: 'Manager',
-          department: 'Sales',
-          status: 'active',
-          profileImage: '',
-          lastLogin: '2024-01-19T15:45:00Z',
-          createdAt: '2024-01-02T00:00:00Z',
-          updatedAt: '2024-01-19T15:45:00Z',
-          dateOfBirth: '1985-05-15',
-          address: '456 Oak Ave',
-          city: 'Los Angeles',
-          state: 'CA',
-          zipCode: '90210',
-          country: 'USA',
-          emergencyContact: 'John Smith',
-          emergencyPhone: '+1-555-0125',
-          notes: 'Sales manager'
-        },
-        {
-          id: '3',
-          firstName: 'Bob',
-          lastName: 'Johnson',
-          email: 'bob.johnson@example.com',
-          phone: '+1-555-0125',
-          role: 'Employee',
-          department: 'Marketing',
-          status: 'inactive',
-          profileImage: '',
-          lastLogin: '2024-01-15T09:20:00Z',
-          createdAt: '2024-01-03T00:00:00Z',
-          updatedAt: '2024-01-15T09:20:00Z',
-          dateOfBirth: '1992-12-10',
-          address: '789 Pine St',
-          city: 'Chicago',
-          state: 'IL',
-          zipCode: '60601',
-          country: 'USA',
-          emergencyContact: 'Mary Johnson',
-          emergencyPhone: '+1-555-0126',
-          notes: 'Marketing employee'
+      // Fetch users from API
+      const response = await userService.getUsers({
+        page: pagination.current,
+        pageSize: pagination.pageSize,
+        filters: debouncedSearchTerm ? {
+          search: debouncedSearchTerm,
+        } : undefined
+      });
+
+      // Map backend response to frontend User format
+      // Backend returns: { id, fullName, email, role, active, deleted, ... }
+      const mappedUsers: User[] = (response.users || []).map((user: any) => {
+        // Parse fullName into firstName and lastName
+        const fullName = user.fullName || '';
+        const nameParts = fullName.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        
+        // Normalize role: "SUPERADMIN" -> "superadmin", "ADMIN" -> "admin"
+        const roleStr = (user.role || '').toLowerCase();
+        const normalizedRole = roleStr === 'superadmin' ? 'superadmin' : 'admin';
+        
+        // Convert active boolean to status string
+        const status = user.active === true ? 'active' : 'inactive';
+        
+        return {
+          id: String(user.id || ''),
+          firstName: firstName,
+          lastName: lastName,
+          email: user.email || '',
+          phone: user.phone || user.phoneNumber || '',
+          role: normalizedRole as 'admin' | 'superadmin',
+          status: status as 'active' | 'inactive',
+          profileImage: user.profileImage || user.profile_image || '',
+          lastLogin: user.lastLogin || user.last_login || '',
+          createdAt: user.createdAt || user.created_at || '',
+          updatedAt: user.updatedAt || user.updated_at || '',
+        };
+      });
+
+      setUsers(mappedUsers);
+      setPagination(prev => {
+        const newTotal = response.pagination?.total || mappedUsers.length;
+        const newTotalPages = response.pagination?.totalPages || Math.ceil(newTotal / prev.pageSize);
+        
+        // Only update if values actually changed to prevent infinite loops
+        if (prev.total === newTotal && prev.totalPages === newTotalPages) {
+          return prev; // Return same reference if nothing changed
         }
-      ];
-
-      // Filter users based on search term
-      let filteredUsers = mockUsers;
-      if (debouncedSearchTerm) {
-        filteredUsers = mockUsers.filter(user => 
-          user.firstName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-          user.lastName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-          user.email.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
-        );
-      }
-
-      setUsers(filteredUsers);
-      setPagination(prev => ({
+        
+        return {
         ...prev,
-        total: filteredUsers.length,
-        totalPages: Math.ceil(filteredUsers.length / prev.pageSize)
-      }));
+          total: newTotal,
+          totalPages: newTotalPages
+        };
+      });
       
     } catch (err) {
+      console.error('Error loading users:', err);
       setError(err instanceof Error ? err.message : 'Failed to load users');
+      // Fallback to empty array on error
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -161,64 +114,123 @@ const Users: React.FC = () => {
 
   const loadStats = useCallback(async () => {
     try {
-      // Static stats for development
-      const mockStats: UserStats = {
-        totalUsers: 3,
-        activeUsers: 2,
-        newThisMonth: 1,
-        totalDepartments: 3,
-        recentLogins: 2
+      // Calculate stats from loaded users instead of API call
+      // (Stats endpoint doesn't exist - avoiding 404 errors)
+      const activeCount = users.filter(u => u.status === 'active').length;
+      const now = new Date();
+      const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      
+      const newThisMonth = users.filter(u => {
+        if (!u.createdAt) return false;
+        const created = new Date(u.createdAt);
+        return created >= oneMonthAgo;
+      }).length;
+
+      const newStats = {
+        totalUsers: users.length,
+        activeUsers: activeCount,
+        newThisMonth: newThisMonth,
+        recentLogins: users.filter(u => u.lastLogin).length
       };
 
-      setStats(mockStats);
+      // Only update if stats actually changed
+      setStats(prev => {
+        if (prev.totalUsers === newStats.totalUsers &&
+            prev.activeUsers === newStats.activeUsers &&
+            prev.newThisMonth === newStats.newThisMonth &&
+            prev.recentLogins === newStats.recentLogins) {
+          return prev; // Return same reference if nothing changed
+        }
+        return newStats;
+      });
     } catch (err) {
-      console.error('Failed to load user stats:', err);
+      console.error('Failed to calculate user stats:', err);
+      // Fallback stats
+      setStats(prev => {
+        const fallbackStats = {
+          totalUsers: users.length,
+          activeUsers: users.filter(u => u.status === 'active').length,
+          newThisMonth: 0,
+          recentLogins: 0
+        };
+        
+        // Only update if changed
+        if (prev.totalUsers === fallbackStats.totalUsers &&
+            prev.activeUsers === fallbackStats.activeUsers &&
+            prev.newThisMonth === fallbackStats.newThisMonth &&
+            prev.recentLogins === fallbackStats.recentLogins) {
+          return prev;
+        }
+        return fallbackStats;
+      });
     }
-  }, []);
+  }, [users]);
 
+  // Load users on mount and when pagination/search changes
   useEffect(() => {
     loadUsers();
+  }, [loadUsers]);
+  
+  // Load stats separately, only when users array changes (not on every render)
+  useEffect(() => {
+    if (users.length >= 0) { // Always recalculate stats when users change
     loadStats();
-  }, [loadUsers, loadStats]);
+    }
+  }, [users.length]); // Only depend on length to avoid infinite loops
 
-  const handleAddUser = async (userData: UserFormData) => {
+  const handleAddUser = async (businessData: BusinessPayload): Promise<void> => {
     try {
-      // Mock user creation for development
-      const mockNewUser: User = {
-        id: Date.now().toString(),
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        email: userData.email,
-        phone: userData.phone,
-        role: userData.role,
-        department: userData.department,
-        status: userData.status,
-        profileImage: '',
-        lastLogin: undefined,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        dateOfBirth: userData.dateOfBirth,
-        address: userData.address,
-        city: userData.city,
-        state: userData.state,
-        zipCode: userData.zipCode,
-        country: userData.country,
-        emergencyContact: userData.emergencyContact,
-        emergencyPhone: userData.emergencyPhone,
-        notes: userData.notes
-      };
-
-      // Add to local state (simulating API call)
-      setUsers(prev => [...prev, mockNewUser]);
-      setStats(prev => ({
-        ...prev,
-        totalUsers: prev.totalUsers + 1,
-        activeUsers: userData.status === 'active' ? prev.activeUsers + 1 : prev.activeUsers
-      }));
+      console.log('🏢 Creating business...', businessData);
       
-      alert(`User ${userData.firstName} ${userData.lastName} has been added successfully!`);
-    } catch (err) {
-      alert(`Failed to add user: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      // Step 1: Create the business
+      const businessResult = await businessService.createBusiness(businessData);
+      console.log('✅ Business created:', businessResult);
+      
+      // Step 2: Extract businessId from response
+      const businessId = businessResult.businessId;
+      
+      if (!businessId) {
+        console.warn('⚠️ Business created but no businessId returned. Cannot create user.');
+        alert('Business created successfully, but could not determine business ID to create user.');
+        await loadUsers();
+        return;
+      }
+      
+      // Step 3: Create a user/admin for this business
+      // Use the contact email and address info to create the user
+      try {
+        // Backend expects fullName, not firstName/lastName separately
+        const fullName = `${businessData.address.firstName} ${businessData.address.lastName}`.trim();
+        
+        const userPayload = {
+          email: businessData.contact.email || businessData.address.emailAddress,
+          fullName: fullName, // Backend uses fullName
+          phoneNumber: businessData.contact.mainPhone || businessData.address.phoneNumber,
+          password: businessData.password,
+          roleId: 2, // Default role ID (you may need to adjust this based on your role system)
+          businessId: businessId,
+          isDeleted: false,
+          isActive: businessData.isActive,
+        };
+        
+        console.log('👤 Creating user/admin...', userPayload);
+        const userResult = await userService.createAdmin(userPayload);
+        console.log('✅ User created:', userResult);
+        
+        alert('User and business created successfully!');
+      } catch (userError) {
+        console.error('❌ Failed to create user:', userError);
+        // Business was created but user creation failed
+        alert(`Business created successfully (ID: ${businessId}), but failed to create user: ${userError instanceof Error ? userError.message : 'Unknown error'}`);
+      }
+      
+      // Step 4: Refresh the user list
+      await loadUsers();
+    } catch (error) {
+      console.error('❌ Failed to create business/user:', error);
+      const message = error instanceof Error ? error.message : 'Failed to create business';
+      alert(`Error: ${message}`);
+      throw error; // Re-throw to show error in modal
     }
   };
 
@@ -347,17 +359,6 @@ const Users: React.FC = () => {
       ),
     },
     {
-      key: 'department',
-      title: 'Department',
-      dataIndex: 'department',
-      filterable: true,
-      render: (value) => (
-        <span className="user-department">
-          {value}
-        </span>
-      ),
-    },
-    {
       key: 'phone',
       title: 'Phone',
       dataIndex: 'phone',
@@ -406,16 +407,18 @@ const Users: React.FC = () => {
           >
             ✏️
           </button>
-          <button
-            className="user-actions__btn user-actions__btn--delete"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDeleteUser(record.id);
-            }}
-            title="Delete"
-          >
-            🗑️
-          </button>
+          {currentUser?.role === 'superadmin' && (
+            <button
+              className="user-actions__btn user-actions__btn--delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteUser(record.id);
+              }}
+              title="Delete"
+            >
+              🗑️
+            </button>
+          )}
         </div>
       ),
     },
@@ -438,12 +441,14 @@ const Users: React.FC = () => {
       >
         Deactivate
       </button>
-      <button
-        className="user-bulk-actions__btn user-bulk-actions__btn--delete"
-        onClick={handleBulkDelete}
-      >
-        Delete
-      </button>
+      {currentUser?.role === 'superadmin' && (
+        <button
+          className="user-bulk-actions__btn user-bulk-actions__btn--delete"
+          onClick={handleBulkDelete}
+        >
+          Delete
+        </button>
+      )}
     </div>
   ) : null;
 

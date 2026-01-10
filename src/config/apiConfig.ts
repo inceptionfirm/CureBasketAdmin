@@ -17,8 +17,8 @@ export interface MockDataConfig {
 
 // Default configuration
 export const DEFAULT_API_CONFIG: APIConfig = {
-  useMockData: true, // Set to false when you have real APIs
-  baseURL: 'https://api.curebasket.com',
+  useMockData: false, // Using real APIs by default
+  baseURL: 'https://java.api.curebasket.com/backend',
   timeout: 30000,
   retryAttempts: 3,
   retryDelay: 1000

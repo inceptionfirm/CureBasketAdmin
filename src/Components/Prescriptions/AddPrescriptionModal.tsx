@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Prescription, PrescriptionMedication } from '../../services/prescriptionService';
+import { PrescriptionMainAttribute } from '../../services/prescriptionService';
 import './AddPrescriptionModal.css';
 
-export interface AddPrescriptionModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (prescriptionData: any) => Promise<void>;
-  editingPrescription?: Prescription | null;
+// Local types for UI (matching Prescriptions component)
+interface PrescriptionMedication {
+  id?: string;
+  medicineId?: string;
+  name: string;
+  dosage?: string;
+  frequency?: string;
+  duration?: string;
+  quantity?: number;
+  instructions?: string;
 }
 
-export interface PrescriptionFormData {
+interface Prescription {
+  id: string;
   prescriptionNumber: string;
   patientId: string;
   doctorId: string;
@@ -23,6 +29,51 @@ export interface PrescriptionFormData {
   medications: PrescriptionMedication[];
 }
 
+export interface AddPrescriptionModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (prescriptionData: any) => Promise<void>;
+  editingPrescription?: (Prescription & { mainAttributes?: PrescriptionMainAttribute[] }) | null;
+}
+
+// User-friendly medication interface
+interface Medication {
+  id: string;
+  medicineName: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  quantity: string;
+  instructions: string;
+  [key: string]: any; // Allow additional dynamic fields
+}
+
+export interface PrescriptionFormData {
+  prescriptionNumber: string;
+  patientId: string;
+  doctorId: string;
+  diagnosis: string;
+  notes: string;
+  status: 'pending' | 'approved' | 'rejected' | 'dispensed' | 'expired';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  prescribedDate: string;
+  expiryDate: string;
+  medications: Medication[];
+}
+
+interface PrescriptionFormErrors {
+  prescriptionNumber?: string;
+  patientId?: string;
+  doctorId?: string;
+  diagnosis?: string;
+  notes?: string;
+  status?: string;
+  priority?: string;
+  prescribedDate?: string;
+  expiryDate?: string;
+  medications?: string; // Error message for medications validation
+}
+
 const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
   isOpen,
   onClose,
@@ -34,7 +85,6 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
     patientId: '',
     doctorId: '',
     diagnosis: '',
-    symptoms: [],
     notes: '',
     status: 'pending',
     priority: 'medium',
@@ -43,32 +93,112 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
     medications: []
   });
 
-  const [errors, setErrors] = useState<Partial<PrescriptionFormData>>({});
+  const [errors, setErrors] = useState<PrescriptionFormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [symptomInput, setSymptomInput] = useState('');
+
+  // Helper function to convert mainAttributes to user-friendly medications
+  // Based on API structure: Each medication is a mainAttribute with name like "Medication 1", 
+  // value = medicine name, and subAttributes contain Dosage, Frequency, Duration, Quantity, etc.
+  const mainAttributesToMedications = (mainAttributes?: PrescriptionMainAttribute[]): Medication[] => {
+    if (!mainAttributes || !Array.isArray(mainAttributes)) {
+      return [];
+    }
+
+    console.log('💊 Converting mainAttributes to medications:', JSON.stringify(mainAttributes, null, 2));
+
+    const medications: Medication[] = [];
+    
+    mainAttributes.forEach((attr, index) => {
+      // Check if this attribute represents a medication (name like "Medication 1", "Medication 2", etc.)
+      const isMedication = attr.name && (
+        attr.name.toLowerCase().startsWith('medication') || 
+        attr.name.toLowerCase().includes('medicine')
+      );
+      
+      // Always extract if it's a medication attribute
+      if (isMedication) {
+        // Medicine name is in the mainAttribute.value
+        const medicineName = attr.value || '';
+        
+        // Handle subAttributes - backend may return null instead of empty array
+        const subAttrs = (attr.subAttributes && Array.isArray(attr.subAttributes)) ? attr.subAttributes : [];
+        
+        // Extract fields from subAttributes (case-sensitive matching as per API)
+        // Use exact name matching (capitalized) as shown in API example
+        const dosage = subAttrs.find(sa => sa.name === 'Dosage')?.value || '';
+        const frequency = subAttrs.find(sa => sa.name === 'Frequency')?.value || '';
+        const duration = subAttrs.find(sa => sa.name === 'Duration')?.value || '';
+        const quantity = subAttrs.find(sa => sa.name === 'Quantity')?.value || '';
+        const instructions = subAttrs.find(sa => sa.name === 'Instructions')?.value || '';
+        
+        // Store all other subAttributes as dynamic fields (like "Refills Allowed")
+        const otherFields = Object.fromEntries(
+          subAttrs
+            .filter(sa => !['Dosage', 'Frequency', 'Duration', 'Quantity', 'Instructions'].includes(sa.name || ''))
+            .map(sa => [sa.name || `field_${Date.now()}`, sa.value || ''])
+        );
+        
+        const medication = {
+          id: String(attr.id || Date.now() + index),
+          medicineName,
+          dosage,
+          frequency,
+          duration,
+          quantity,
+          instructions,
+          ...otherFields
+        };
+        
+        console.log(`💊 Extracted medication ${index + 1}:`, medication);
+        
+        medications.push(medication);
+      }
+    });
+
+    console.log('💊 Total medications extracted:', medications.length);
+    return medications;
+  };
 
   useEffect(() => {
     if (editingPrescription) {
+      console.log('💊 AddPrescriptionModal - Editing prescription:', editingPrescription);
+      
+      // Convert mainAttributes to medications for display
+      const medications = editingPrescription.mainAttributes 
+        ? mainAttributesToMedications(editingPrescription.mainAttributes)
+        : [];
+      
+      // Handle expiry date - API doesn't return it, so calculate 30 days from prescription date
+      const prescriptionDate = editingPrescription.prescribedDate 
+        ? new Date(editingPrescription.prescribedDate) 
+        : new Date();
+      const calculatedExpiryDate = new Date(prescriptionDate);
+      calculatedExpiryDate.setDate(calculatedExpiryDate.getDate() + 30); // Default 30 days
+      
       setFormData({
         prescriptionNumber: editingPrescription.prescriptionNumber,
         patientId: editingPrescription.patientId,
         doctorId: editingPrescription.doctorId,
         diagnosis: editingPrescription.diagnosis,
-        symptoms: editingPrescription.symptoms,
         notes: editingPrescription.notes,
         status: editingPrescription.status,
         priority: editingPrescription.priority,
-        prescribedDate: editingPrescription.prescribedDate.split('T')[0],
-        expiryDate: editingPrescription.expiryDate.split('T')[0],
-        medications: editingPrescription.medications
+        prescribedDate: editingPrescription.prescribedDate 
+          ? editingPrescription.prescribedDate.split('T')[0] 
+          : new Date().toISOString().split('T')[0],
+        expiryDate: editingPrescription.expiryDate 
+          ? editingPrescription.expiryDate.split('T')[0]
+          : calculatedExpiryDate.toISOString().split('T')[0],
+        medications
       });
+      
+      console.log('💊 AddPrescriptionModal - Form data set with medications:', medications.length);
     } else {
       setFormData({
         prescriptionNumber: '',
         patientId: '',
         doctorId: '',
         diagnosis: '',
-        symptoms: [],
         notes: '',
         status: 'pending',
         priority: 'medium',
@@ -87,48 +217,67 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
       [name]: value
     }));
     
-    if (errors[name as keyof PrescriptionFormData]) {
-      setErrors(prev => ({
+    if (errors[name as keyof PrescriptionFormErrors]) {
+      setErrors((prev: PrescriptionFormErrors) => ({
         ...prev,
         [name]: undefined
       }));
     }
   };
 
-  const handleAddSymptom = () => {
-    if (symptomInput.trim() && !formData.symptoms.includes(symptomInput.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        symptoms: [...prev.symptoms, symptomInput.trim()]
-      }));
-      setSymptomInput('');
-    }
-  };
-
-  const handleRemoveSymptom = (symptom: string) => {
-    setFormData(prev => ({
-      ...prev,
-      symptoms: prev.symptoms.filter(s => s !== symptom)
-    }));
+  // Helper function to convert medications to mainAttributes for backend
+  // Matches API structure exactly: name="Medication 1", value=medicine name, subAttributes=[Dosage, Frequency, etc.]
+  const medicationsToMainAttributes = (medications: Medication[]): PrescriptionMainAttribute[] => {
+    const mainAttrs = medications.map((med, index) => {
+      const subAttributes: any[] = [];
+      
+      // Add standard fields as subAttributes (exact capitalized names as per API)
+      if (med.dosage && med.dosage.trim()) {
+        subAttributes.push({ name: 'Dosage', value: med.dosage.trim() });
+      }
+      if (med.frequency && med.frequency.trim()) {
+        subAttributes.push({ name: 'Frequency', value: med.frequency.trim() });
+      }
+      if (med.duration && med.duration.trim()) {
+        subAttributes.push({ name: 'Duration', value: med.duration.trim() });
+      }
+      if (med.quantity && med.quantity.trim()) {
+        subAttributes.push({ name: 'Quantity', value: med.quantity.trim() });
+      }
+      if (med.instructions && med.instructions.trim()) {
+        subAttributes.push({ name: 'Instructions', value: med.instructions.trim() });
+      }
+      
+      // Add any additional dynamic fields (like "Refills Allowed")
+      Object.keys(med).forEach(key => {
+        if (!['id', 'medicineName', 'dosage', 'frequency', 'duration', 'quantity', 'instructions'].includes(key)) {
+          if (med[key] && String(med[key]).trim()) {
+            subAttributes.push({ name: key, value: String(med[key]).trim() });
+          }
+        }
+      });
+      
+      return {
+        name: `Medication ${index + 1}`,
+        scale: null, // API uses null, not 'list'
+        value: med.medicineName || '',
+        subAttributes: subAttributes.length > 0 ? subAttributes : [] // Always send array, never null
+      };
+    });
+    
+    console.log('💊 Converted medications to mainAttributes:', JSON.stringify(mainAttrs, null, 2));
+    return mainAttrs;
   };
 
   const handleAddMedication = () => {
-    const newMedication: PrescriptionMedication = {
+    const newMedication: Medication = {
       id: Date.now().toString(),
-      medicineId: '',
-      medicine: {
-        id: '',
-        name: '',
-        manufacturer: '',
-        form: ''
-      },
+      medicineName: '',
       dosage: '',
       frequency: '',
       duration: '',
-      quantity: 1,
-      instructions: '',
-      refillsAllowed: 0,
-      refillsUsed: 0
+      quantity: '',
+      instructions: ''
     };
 
     setFormData(prev => ({
@@ -137,7 +286,7 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
     }));
   };
 
-  const handleMedicationChange = (index: number, field: keyof PrescriptionMedication, value: any) => {
+  const handleMedicationChange = (index: number, field: keyof Medication, value: any) => {
     setFormData(prev => ({
       ...prev,
       medications: prev.medications.map((med, i) => 
@@ -154,7 +303,7 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<PrescriptionFormData> = {};
+    const newErrors: PrescriptionFormErrors = {};
 
     if (!formData.prescriptionNumber.trim()) {
       newErrors.prescriptionNumber = 'Prescription number is required';
@@ -176,9 +325,17 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
       newErrors.expiryDate = 'Expiry date is required';
     }
 
-    if (formData.medications.length === 0) {
+    // Medications validation: Only required for CREATE, not for UPDATE
+    if (!editingPrescription && formData.medications.length === 0) {
       newErrors.medications = 'At least one medication is required';
     }
+
+    // Validate each medication has a medicine name
+    formData.medications.forEach((med, index) => {
+      if (!med.medicineName || !med.medicineName.trim()) {
+        newErrors.medications = `Medication ${index + 1} must have a medicine name`;
+      }
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -193,7 +350,13 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await onSubmit(formData);
+      // Convert medications to mainAttributes before submitting
+      const formDataWithMainAttributes = {
+        ...formData,
+        mainAttributes: medicationsToMainAttributes(formData.medications)
+      };
+      
+      await onSubmit(formDataWithMainAttributes);
       onClose();
     } catch (error) {
       console.error('Error submitting prescription:', error);
@@ -208,7 +371,6 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
       patientId: '',
       doctorId: '',
       diagnosis: '',
-      symptoms: [],
       notes: '',
       status: 'pending',
       priority: 'medium',
@@ -217,7 +379,6 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
       medications: []
     });
     setErrors({});
-    setSymptomInput('');
     onClose();
   };
 
@@ -330,43 +491,6 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
               </div>
 
               <div className="form-group">
-                <label className="form-label">Symptoms</label>
-                <div className="symptom-input-container">
-                  <input
-                    type="text"
-                    value={symptomInput}
-                    onChange={(e) => setSymptomInput(e.target.value)}
-                    className="form-input"
-                    placeholder="Enter symptom"
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSymptom())}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddSymptom}
-                    className="add-symptom-btn"
-                  >
-                    Add
-                  </button>
-                </div>
-                {formData.symptoms.length > 0 && (
-                  <div className="symptom-list">
-                    {formData.symptoms.map((symptom, index) => (
-                      <span key={index} className="symptom-item">
-                        {symptom}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSymptom(symptom)}
-                          className="remove-symptom-btn"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="form-group">
                 <label className="form-label">Notes</label>
                 <textarea
                   name="notes"
@@ -438,13 +562,14 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
 
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Medicine ID</label>
+                      <label className="form-label">Medicine Name *</label>
                       <input
                         type="text"
-                        value={medication.medicineId}
-                        onChange={(e) => handleMedicationChange(index, 'medicineId', e.target.value)}
+                        value={medication.medicineName}
+                        onChange={(e) => handleMedicationChange(index, 'medicineName', e.target.value)}
                         className="form-input"
-                        placeholder="Enter medicine ID"
+                        placeholder="e.g., Paracetamol"
+                        required
                       />
                     </div>
 
@@ -488,35 +613,24 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
                     <div className="form-group">
                       <label className="form-label">Quantity</label>
                       <input
-                        type="number"
+                        type="text"
                         value={medication.quantity}
-                        onChange={(e) => handleMedicationChange(index, 'quantity', parseInt(e.target.value) || 1)}
+                        onChange={(e) => handleMedicationChange(index, 'quantity', e.target.value)}
                         className="form-input"
-                        min="1"
+                        placeholder="e.g., 10 tablets"
                       />
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Refills Allowed</label>
+                      <label className="form-label">Instructions</label>
                       <input
-                        type="number"
-                        value={medication.refillsAllowed}
-                        onChange={(e) => handleMedicationChange(index, 'refillsAllowed', parseInt(e.target.value) || 0)}
+                        type="text"
+                        value={medication.instructions}
+                        onChange={(e) => handleMedicationChange(index, 'instructions', e.target.value)}
                         className="form-input"
-                        min="0"
+                        placeholder="e.g., Take after meals"
                       />
                     </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Instructions</label>
-                    <textarea
-                      value={medication.instructions}
-                      onChange={(e) => handleMedicationChange(index, 'instructions', e.target.value)}
-                      className="form-textarea"
-                      rows={2}
-                      placeholder="Enter medication instructions"
-                    />
                   </div>
                 </div>
               ))}

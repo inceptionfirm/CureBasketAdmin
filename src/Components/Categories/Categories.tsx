@@ -10,7 +10,6 @@ interface Category {
   name: string;
   slug: string;
   description?: string;
-  parentCategory?: string;
   image?: string;
   status: 'active' | 'inactive' | 'draft';
   sortOrder: number;
@@ -47,8 +46,10 @@ const Categories: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response = await categoryService.getCategories({
-        page: 1,
+      // Try page 0 first (0-indexed, common in backends)
+      // If empty, try page 1 (1-indexed, as shown in curl)
+      let response = await categoryService.getCategories({
+        page: 0, // Try 0-indexed first
         pageSize: 100,
         filters: {
           search: searchTerm || undefined,
@@ -56,46 +57,98 @@ const Categories: React.FC = () => {
         }
       });
       
-      setCategories(response.data);
+      console.log('📦 Categories component - First attempt (page 0):', response);
+      console.log('📦 Categories component - Response.categories length:', response.categories?.length);
+      console.log('📦 Categories component - Pagination total:', response.pagination?.total);
+      
+      // If content is empty but total > 0, try page 1 (1-indexed)
+      if ((!response.categories || response.categories.length === 0) && response.pagination?.total > 0) {
+        console.log('📦 Categories component - Content empty but total > 0, trying page 1...');
+        response = await categoryService.getCategories({
+          page: 1, // Try 1-indexed
+          pageSize: 100,
+          filters: {
+            search: searchTerm || undefined,
+            status: statusFilter || undefined
+          }
+        });
+        console.log('📦 Categories component - Second attempt (page 1):', response);
+      }
+      
+      if (!response || !response.categories) {
+        console.error('❌ Invalid response structure:', response);
+        throw new Error('Invalid response from server: categories array not found');
+      }
+      
+      if (!Array.isArray(response.categories)) {
+        console.error('❌ Categories is not an array:', response.categories);
+        throw new Error('Invalid response: categories is not an array');
+      }
+      
+      console.log('📦 Setting categories:', response.categories.length, 'categories');
+      setCategories(response.categories);
+      
+      // Calculate stats from categories data (analytics endpoint doesn't exist)
+      const totalCategories = response.pagination?.total || response.categories.length;
+      const activeCategories = response.categories.filter(c => c.status === 'active').length;
+      const inactiveCategories = response.categories.filter(c => c.status === 'inactive').length;
+      const draftCategories = response.categories.filter(c => c.status === 'draft').length;
+      
+      console.log('📦 Calculated stats:', { totalCategories, activeCategories, inactiveCategories, draftCategories });
+      
+      setStats({
+        totalCategories,
+        activeCategories,
+        inactiveCategories,
+        draftCategories
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load categories');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load categories';
+      console.error('❌ Error loading categories:', err);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   }, [searchTerm, statusFilter]);
 
-  const loadStats = useCallback(async () => {
-    try {
-      const analytics = await categoryService.getCategoryAnalytics();
-      setStats({
-        totalCategories: analytics.totalCategories,
-        activeCategories: analytics.activeCategories,
-        inactiveCategories: analytics.inactiveCategories,
-        draftCategories: analytics.draftCategories
-      });
-    } catch (err) {
-      console.error('Failed to load stats:', err);
-    }
-  }, []);
-
   useEffect(() => {
     loadCategories();
-    loadStats();
-  }, [loadCategories, loadStats]);
+  }, [loadCategories]);
 
   const handleAddCategory = async (categoryData: any) => {
     try {
+      setError(null);
+      console.log('📦 Category form data received:', categoryData);
+      console.log('📦 Editing category:', editingCategory);
+      
       if (editingCategory) {
-        await categoryService.updateCategory(editingCategory.id, categoryData);
+        // Map form data to API format for update
+        const updatePayload = {
+          name: categoryData.name,
+          description: categoryData.description,
+          itemType: categoryData.itemType || 'PRODUCT',
+          status: categoryData.status || 'ACTIVE'
+        };
+        console.log('📦 Calling updateCategory with:', updatePayload);
+        await categoryService.updateCategory(editingCategory.id, updatePayload);
       } else {
-        await categoryService.createCategory(categoryData);
+        // Map form data to API format for create
+        const createPayload = {
+          name: categoryData.name,
+          description: categoryData.description || '',
+          itemType: categoryData.itemType || 'PRODUCT',
+          status: categoryData.status || 'ACTIVE'
+        };
+        console.log('📦 Calling createCategory with:', createPayload);
+        await categoryService.createCategory(createPayload);
       }
       await loadCategories();
-      await loadStats();
       setIsAddCategoryModalOpen(false);
       setEditingCategory(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save category');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save category';
+      console.error('❌ Error saving category:', err);
+      setError(errorMessage);
     }
   };
 
@@ -109,7 +162,6 @@ const Categories: React.FC = () => {
       try {
         await categoryService.deleteCategory(id);
         await loadCategories();
-        await loadStats();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to delete category');
       }
@@ -138,11 +190,20 @@ const Categories: React.FC = () => {
     );
   };
 
-  const filteredCategories = categories.filter(category => {
-    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         category.slug.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredCategories = (categories ?? []).filter(category => {
+    const matchesSearch = !searchTerm || 
+                         category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (category.slug && category.slug.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = !statusFilter || category.status === statusFilter;
     return matchesSearch && matchesStatus;
+  });
+  
+  console.log('📦 Filtered categories:', {
+    totalCategories: categories.length,
+    filteredCount: filteredCategories.length,
+    searchTerm,
+    statusFilter,
+    categories: categories.map(c => ({ id: c.id, name: c.name, status: c.status }))
   });
 
   return (
@@ -234,7 +295,6 @@ const Categories: React.FC = () => {
                 <th>Image</th>
                 <th>Name</th>
                 <th>Slug</th>
-                <th>Parent</th>
                 <th>Products</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -261,11 +321,6 @@ const Categories: React.FC = () => {
                   </td>
                   <td>
                     <div className="category-slug">{category.slug}</div>
-                  </td>
-                  <td>
-                    <div className="category-slug">
-                      {category.parentCategory || 'Root'}
-                    </div>
                   </td>
                   <td>
                     <div className="category-name">{category.productCount}</div>
