@@ -246,7 +246,7 @@ const AddPrescriptionModal: React.FC<AddPrescriptionModalProps> = ({
       }
       if (med.instructions && med.instructions.trim()) {
         subAttributes.push({ name: 'Instructions', value: med.instructions.trim() });
-      }
+    }
       
       // Add any additional dynamic fields (like "Refills Allowed")
       Object.keys(med).forEach(key => {

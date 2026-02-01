@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { fileUploadService } from './fileUploadService';
 
 // Prescription API Types based on actual backend structure
 export interface PrescriptionMainAttribute {
@@ -219,6 +220,63 @@ class PrescriptionService {
       success: true,
       message: response.message || 'Prescription deleted successfully',
     };
+  }
+
+  // Upload Prescription Files
+  /**
+   * Upload files for a prescription (can be images or documents)
+   * Uses the common catalog upload endpoint: /catalog/upload/file/{prescriptionId}
+   * 
+   * @param prescriptionId - Prescription ID
+   * @param files - Array of files to upload (images or documents)
+   * @param docTypes - Optional document types (e.g., ['prescriptionImage', 'prescriptionDocument'])
+   * @returns Promise with upload response
+   * 
+   * @example
+   * await prescriptionService.uploadFiles(37, [file1, file2], ['prescriptionImage', 'prescriptionDocument']);
+   */
+  async uploadFiles(
+    prescriptionId: number,
+    files: File[],
+    docTypes?: string[]
+  ): Promise<{ success: boolean; message?: string; data?: any }> {
+    try {
+      const response = await fileUploadService.uploadPrescriptionFiles(prescriptionId, files, docTypes);
+      return {
+        success: response.success,
+        message: response.message,
+        data: response.data,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload prescription files';
+      console.error('❌ Error uploading prescription files:', error);
+      throw new Error(errorMessage);
+    }
+  }
+
+  // Delete Prescription File
+  /**
+   * Delete a file associated with a prescription
+   * Uses the common catalog delete endpoint: /catalog/delete/file?fileId={fileId}
+   * 
+   * @param fileId - File ID to delete
+   * @returns Promise with delete response
+   * 
+   * @example
+   * await prescriptionService.deleteFile(123);
+   */
+  async deleteFile(fileId: number): Promise<{ success: boolean; message?: string }> {
+    try {
+      const response = await fileUploadService.deleteFile(fileId);
+      return {
+        success: response.success,
+        message: response.message,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete prescription file';
+      console.error('❌ Error deleting prescription file:', error);
+      throw new Error(errorMessage);
+    }
   }
 }
 

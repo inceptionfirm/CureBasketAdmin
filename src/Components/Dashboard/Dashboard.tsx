@@ -122,16 +122,16 @@ const Dashboard: React.FC = () => {
                 <div className="stat-content">
                   <div className="metric-value">{formatNumber(stats.prescriptions.total)}</div>
                   <div className="metric-label">Prescriptions</div>
-                </div>
-              </div>
+          </div>
+          </div>
               <div className="metric-card stat-card">
                 <div className="stat-icon">📝</div>
                 <div className="stat-content">
                   <div className="metric-value">{formatNumber(stats.blogs.total)}</div>
                   <div className="metric-label">Blogs</div>
                   <div className="stat-sublabel">Published Articles</div>
-                </div>
-              </div>
+          </div>
+          </div>
             </>
           ) : (
             <div className="error-placeholder">Failed to load statistics</div>
@@ -141,35 +141,35 @@ const Dashboard: React.FC = () => {
 
       {/* Revenue Chart Section */}
       <div className="charts-section">
-        <div className="chart-card">
-          <div className="chart-header">
+          <div className="chart-card">
+            <div className="chart-header">
             <h3 className="chart-title">Revenue Trend</h3>
-            <select className="chart-period">
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="90d">Last 90 days</option>
-            </select>
+              <select className="chart-period">
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="90d">Last 90 days</option>
+              </select>
+            </div>
+            <div className="chart-content">
+              <div className="chart-bars">
+                {[65, 80, 45, 90, 75, 85, 70].map((height, index) => (
+                  <div key={index} className="chart-bar" style={{height: `${height}%`}}>
+                    <span className="bar-value">{height}%</span>
+                  </div>
+                ))}
+              </div>
+              <div className="chart-labels">
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+                <span>Sun</span>
+              </div>
+            </div>
           </div>
-          <div className="chart-content">
-            <div className="chart-bars">
-              {[65, 80, 45, 90, 75, 85, 70].map((height, index) => (
-                <div key={index} className="chart-bar" style={{height: `${height}%`}}>
-                  <span className="bar-value">{height}%</span>
                 </div>
-              ))}
-            </div>
-            <div className="chart-labels">
-              <span>Mon</span>
-              <span>Tue</span>
-              <span>Wed</span>
-              <span>Thu</span>
-              <span>Fri</span>
-              <span>Sat</span>
-              <span>Sun</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Recent Prescriptions Section */}
       <div className="tables-section">
@@ -186,43 +186,43 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-
+      
       {/* Recent Orders Table */}
       <div className="tables-section">
-        <div className="table-container">
-          <div className="table-header">
-            <h3 className="table-title">Recent Orders</h3>
-            <button className="view-all-btn">View All</button>
-          </div>
-          <div className="table-content">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Order ID</th>
-                  <th>Customer</th>
-                  <th>Status</th>
-                  <th>Amount</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="table-container">
+            <div className="table-header">
+              <h3 className="table-title">Recent Orders</h3>
+              <button className="view-all-btn">View All</button>
+            </div>
+            <div className="table-content">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Status</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
                 {orderHistory.map((order) => (
                   <tr key={order.id}>
-                    <td className="order-id">#{order.id}</td>
+                      <td className="order-id">#{order.id}</td>
                     <td className="customer">{order.customerName}</td>
-                    <td>
+                      <td>
                       <span className={`status-badge ${order.status}`}>
-                        {order.status}
-                      </span>
-                    </td>
+                          {order.status}
+                        </span>
+                      </td>
                     <td className="amount">{formatCurrency(order.amount)}</td>
-                    <td className="date">{order.date}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <td className="date">{order.date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
       </div>
     </div>
   );

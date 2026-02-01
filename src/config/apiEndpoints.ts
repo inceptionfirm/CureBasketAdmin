@@ -56,6 +56,9 @@ export const API_ENDPOINTS = {
     delete: (id: number) => `/medicines/deleteMedicine/${id}`,
     getAllManufacturers: '/medicines/getAllManufacturers',
     getAllMedicineForms: '/medicines/getAllMedicineForms',
+    // Image endpoints
+    uploadImage: (id: number) => `/medicines/image/upload/${id}`,
+    getImage: (id: number) => `/medicines/image/${id}`, // Try this endpoint for getting image
   },
 
   // Catalog endpoints
@@ -63,7 +66,7 @@ export const API_ENDPOINTS = {
     // Items
     addItem: (itemType: string) => `/catalog/add-item/${itemType}`,
     filter: (itemType: string) => `/catalog/filter/${itemType}`,
-    
+
     // Attributes
     addMainAttr: (itemId: number) => `/catalog/add/main-attr/${itemId}`,
     addSubAttr: (itemId: number, mainAttrId: number) => `/catalog/add/sub-attr/${itemId}/${mainAttrId}`,
@@ -72,18 +75,18 @@ export const API_ENDPOINTS = {
     updateSubAttr: '/catalog/update/sub-attr',
     deleteMainAttr: (id: number) => `/catalog/delete/main-attr/${id}`,
     deleteSubAttr: (id: number) => `/catalog/delete/sub-attr/${id}`,
-    
+
     // Files
-    uploadFile: (itemId: number) => `/catalog/uplaod/file/${itemId}`,
+    uploadFile: (itemId: number) => `/catalog/upload/file/${itemId}`,
     deleteFile: (fileId: number) => `/catalog/delete/file?fileId=${fileId}`,
     deleteItemFiles: (itemId: number) => `/catalog/delete/item/files/${itemId}`,
     deleteCategoryFiles: (categoryId: number) => `/catalog/delete/category/files/${categoryId}`,
-    
+
     // Item status
     disableItem: (itemId: number) => `/catalog/disable/item/${itemId}`,
     enableItem: (itemId: number) => `/catalog/enable/item/${itemId}`,
     refreshCache: (itemId: number) => `/catalog/refresh/${itemId}`,
-    
+
     // Categories
     categories: '/catalog/categories',
     addCategory: '/catalog/add-category',
@@ -126,6 +129,21 @@ export const API_ENDPOINTS = {
     getById: (id: number) => `/admin-penal/get-business/${id}`,
     getAll: '/admin-penal/get-all-businesses',
     delete: (id: number) => `/admin-penal/delete-business/${id}`,
+  },
+
+  // Metadata / configuration endpoints (admin-only)
+  metadata: {
+    // Bank information (used in payment emails etc.)
+    configureBankInfo: '/metadata/configure/bank-info',
+    getBankInfo: '/metadata/get/bank-info',
+
+    // Mail templates for different statuses (e.g. APPROVE, DISPENSED)
+    configureMailInfo: (status: string) => `/metadata/configure/mail-info/${status}`,
+    getMailInfo: '/metadata/get/mail-info',
+
+    // Contact us information (shown on website)
+    configureContactUsInfo: '/metadata/configure/contact-us',
+    getContactUsInfo: '/metadata/get/contact-us',
   },
 } as const;
 

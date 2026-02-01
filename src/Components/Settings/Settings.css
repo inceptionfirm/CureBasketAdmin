@@ -444,3 +444,134 @@ input:disabled + .toggle-slider {
     padding: 0.375rem 0.75rem;
   }
 }
+
+/* Settings Section Description */
+.settings-section-description {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+/* Bank Error */
+.bank-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.bank-error p {
+  margin: 0;
+  color: #991b1b;
+}
+
+/* Setting Input */
+.setting-input {
+  padding: 0.75rem 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: white;
+  color: #374151;
+  min-width: 300px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.setting-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.setting-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Setting Textarea */
+.setting-textarea {
+  padding: 0.75rem 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: white;
+  color: #374151;
+  min-width: 300px;
+  width: 100%;
+  max-width: 600px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.setting-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.setting-textarea::placeholder {
+  color: #9ca3af;
+}
+
+/* Mail Template Section */
+.mail-template-section {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.mail-template-section h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.mail-template-section .setting-info h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.25rem;
+}
+
+.mail-template-section .setting-info p {
+  font-size: 0.85rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.mail-template-section .setting-item {
+  margin-bottom: 1.5rem;
+}
+
+.mail-template-section .settings-actions {
+  margin-top: 1rem;
+  margin-bottom: 0;
+}
+
+/* Responsive Mail Template */
+@media (max-width: 768px) {
+  .setting-input,
+  .setting-textarea {
+    min-width: 100%;
+    max-width: 100%;
+  }
+  
+  .mail-template-section {
+    padding: 1rem;
+  }
+  
+  .mail-template-section .setting-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+}

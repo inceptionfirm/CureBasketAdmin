@@ -24,7 +24,8 @@ interface Banner {
 interface AddBannerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: BannerFormData) => void;
+  onSubmit: (data: BannerFormData) => Promise<number | null>; // Returns banner ID
+  onImageUpload?: (bannerId: number, file: File) => Promise<void>; // Separate image upload
   editingBanner?: Banner | null;
 }
 
@@ -33,41 +34,38 @@ interface BannerFormData {
   description: string;
   image: string;
   imageAlt: string;
-  linkUrl: string;
-  linkText: string;
-  position: 'top' | 'middle' | 'bottom' | 'sidebar' | 'popup';
-  type: 'hero' | 'promotional' | 'announcement' | 'advertisement' | 'notification';
-  status: 'active' | 'inactive' | 'scheduled' | 'expired';
+  position: string;
+  type: string;
+  status: string;
   priority: number;
-  startDate: string;
-  endDate: string;
 }
 
 const AddBannerModal: React.FC<AddBannerModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  onImageUpload,
   editingBanner
 }) => {
   const { t } = useLocale();
-  
+
   const [formData, setFormData] = useState<BannerFormData>({
     title: '',
     description: '',
     image: '',
     imageAlt: '',
-    linkUrl: '',
-    linkText: '',
     position: 'top',
     type: 'hero',
     status: 'active',
-    priority: 1,
-    startDate: '',
-    endDate: ''
+    priority: 1
   });
 
   const [errors, setErrors] = useState<Partial<BannerFormData>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingBanner, setIsSavingBanner] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [bannerSaved, setBannerSaved] = useState(false);
+  const [savedBannerId, setSavedBannerId] = useState<number | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
 
@@ -78,14 +76,10 @@ const AddBannerModal: React.FC<AddBannerModalProps> = ({
         description: editingBanner.description || '',
         image: editingBanner.image || '',
         imageAlt: editingBanner.imageAlt || '',
-        linkUrl: editingBanner.linkUrl || '',
-        linkText: editingBanner.linkText || '',
-        position: editingBanner.position || 'top',
-        type: editingBanner.type || 'hero',
-        status: editingBanner.status || 'active',
-        priority: editingBanner.priority || 1,
-        startDate: editingBanner.startDate ? editingBanner.startDate.split('T')[0] : '',
-        endDate: editingBanner.endDate ? editingBanner.endDate.split('T')[0] : ''
+        position: editingBanner.position || 'Left',
+        type: editingBanner.type || '',
+        status: editingBanner.status === 'active' || editingBanner.status === 'inactive' ? editingBanner.status : 'active',
+        priority: [1, 2, 3].includes(editingBanner.priority) ? editingBanner.priority : 1
       });
       if (editingBanner.image) {
         setImagePreview(editingBanner.image);
@@ -101,23 +95,24 @@ const AddBannerModal: React.FC<AddBannerModalProps> = ({
       description: '',
       image: '',
       imageAlt: '',
-      linkUrl: '',
-      linkText: '',
-      position: 'top',
-      type: 'hero',
+      position: 'Left',
+      type: '',
       status: 'active',
-      priority: 1,
-      startDate: '',
-      endDate: ''
+      priority: 1
     });
     setErrors({});
     setSelectedFile(null);
     setImagePreview('');
+    setBannerSaved(false);
+    setSavedBannerId(null);
+    setSubmitError(null);
+    setIsSavingBanner(false);
+    setIsUploadingImage(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: name === 'priority' ? parseInt(value) || 1 : value
@@ -149,7 +144,7 @@ const AddBannerModal: React.FC<AddBannerModalProps> = ({
         setFormData(prev => ({ ...prev, image: result }));
       };
       reader.readAsDataURL(file);
-      
+
       if (errors.image) {
         setErrors(prev => ({ ...prev, image: undefined }));
       }
@@ -160,60 +155,118 @@ const AddBannerModal: React.FC<AddBannerModalProps> = ({
     setSelectedFile(null);
     setImagePreview('');
     setFormData(prev => ({ ...prev, image: '' }));
-    
+
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) {
       fileInput.value = '';
     }
   };
 
-  const validateForm = (): boolean => {
-    const newErrors: Partial<BannerFormData> = {};
+  const validateForm = (skipImage: boolean = false): boolean => {
+    const newErrors: any = {};
 
     if (!formData.title.trim()) {
       newErrors.title = 'Title is required';
     }
 
-    if (!formData.image.trim()) {
+    // Don't require image when saving details first (image will be uploaded later)
+    if (!skipImage && !formData.image.trim() && !selectedFile) {
       newErrors.image = 'Image is required';
     }
 
-    if (!formData.position) {
+    if (!formData.position || (typeof formData.position === 'string' && !formData.position.trim())) {
       newErrors.position = 'Position is required';
     }
 
-    if (!formData.type) {
+    if (!formData.type || (typeof formData.type === 'string' && !formData.type.trim())) {
       newErrors.type = 'Type is required';
     }
 
-    if (formData.priority < 1 || formData.priority > 10) {
-      newErrors.priority = 'Priority must be between 1 and 10';
-    }
-
-    if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
-      newErrors.endDate = 'End date must be after start date';
+    if (![1, 2, 3].includes(formData.priority)) {
+      newErrors.priority = 'Priority must be 1, 2, or 3';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
+  const handleSaveDetails = async () => {
+    // Clear previous errors
+    setSubmitError(null);
+
+    // Validate form but skip image requirement (image will be uploaded later)
+    const isValid = validateForm(true);
+    console.log('📢 Form validation result:', isValid, 'Form data:', formData);
+
+    if (!isValid) {
+      console.error('❌ Form validation failed:', errors);
       return;
     }
 
-    setIsSubmitting(true);
+    setIsSavingBanner(true);
 
     try {
-      await onSubmit(formData);
+      console.log('📢 Saving banner details - Form data:', formData);
+      console.log('📢 Calling onSubmit with formData...');
+
+      // Save banner details first (all details including seoTitle, seoDescription if any)
+      const bannerId = await onSubmit(formData);
+
+      console.log('📢 onSubmit returned bannerId:', bannerId);
+
+      if (bannerId) {
+        setSavedBannerId(bannerId);
+        setBannerSaved(true);
+        console.log('✅ Banner details saved successfully with ID:', bannerId);
+      } else {
+        throw new Error('Failed to get banner ID after save');
+      }
+    } catch (error) {
+      console.error('❌ Error saving banner details:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save banner details. Please try again.';
+      setSubmitError(errorMessage);
+    } finally {
+      setIsSavingBanner(false);
+    }
+  };
+
+  const handleSaveAll = async () => {
+    if (!savedBannerId) {
+      setSubmitError('Please save details first');
+      return;
+    }
+
+    setSubmitError(null);
+
+    // When editing, skip image upload (images are frozen and cannot be updated)
+    if (editingBanner) {
+      console.log('📢 Editing mode - skipping image upload (images are frozen)');
+      handleClose();
+      return;
+    }
+
+    // If no image selected, just close modal
+    if (!selectedFile || !onImageUpload) {
+      handleClose();
+      return;
+    }
+
+    setIsUploadingImage(true);
+
+    try {
+      // Upload image if file is selected (only for new banners)
+      console.log('📢 Uploading image for banner ID:', savedBannerId);
+      await onImageUpload(savedBannerId, selectedFile);
+      console.log('✅ Image uploaded successfully');
+
+      // Close modal after successful upload
       handleClose();
     } catch (error) {
-      console.error('Error submitting banner:', error);
+      console.error('❌ Error uploading image:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload image. Please try again.';
+      setSubmitError(errorMessage);
     } finally {
-      setIsSubmitting(false);
+      setIsUploadingImage(false);
     }
   };
 
@@ -244,7 +297,7 @@ const AddBannerModal: React.FC<AddBannerModalProps> = ({
           </button>
         </div>
 
-        <form className="banner-modal-form" onSubmit={handleSubmit}>
+        <form className="banner-modal-form" onSubmit={(e) => e.preventDefault()}>
           <div className="banner-form-content">
             <div className="banner-form-section">
               <h3 className="section-title">
@@ -285,42 +338,56 @@ const AddBannerModal: React.FC<AddBannerModalProps> = ({
 
               <div className="form-row">
                 <div className="form-group">
+                  <label htmlFor="itemType" className="form-label">
+                    Item Type
+                  </label>
+                  <input
+                    type="text"
+                    id="itemType"
+                    name="itemType"
+                    value="BANNER"
+                    readOnly
+                    disabled
+                    className="form-input"
+                    style={{
+                      background: '#f5f5f5',
+                      cursor: 'not-allowed',
+                      color: '#666'
+                    }}
+                  />
+                </div>
+
+                <div className="form-group">
                   <label htmlFor="position" className="form-label">
                     Position *
                   </label>
-                  <select
+                  <input
+                    type="text"
                     id="position"
                     name="position"
                     value={formData.position}
                     onChange={handleInputChange}
-                    className={`form-select ${errors.position ? 'error' : ''}`}
-                  >
-                    <option value="top">Top</option>
-                    <option value="middle">Middle</option>
-                    <option value="bottom">Bottom</option>
-                    <option value="sidebar">Sidebar</option>
-                    <option value="popup">Popup</option>
-                  </select>
+                    className={`form-input ${errors.position ? 'error' : ''}`}
+                    placeholder="e.g., Left, Top, Middle"
+                  />
                   {errors.position && <span className="error-message">{errors.position}</span>}
                 </div>
+              </div>
 
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="type" className="form-label">
                     Type *
                   </label>
-                  <select
+                  <input
+                    type="text"
                     id="type"
                     name="type"
                     value={formData.type}
                     onChange={handleInputChange}
-                    className={`form-select ${errors.type ? 'error' : ''}`}
-                  >
-                    <option value="hero">Hero</option>
-                    <option value="promotional">Promotional</option>
-                    <option value="announcement">Announcement</option>
-                    <option value="advertisement">Advertisement</option>
-                    <option value="notification">Notification</option>
-                  </select>
+                    className={`form-input ${errors.type ? 'error' : ''}`}
+                    placeholder="e.g., example, promotional, hero"
+                  />
                   {errors.type && <span className="error-message">{errors.type}</span>}
                 </div>
               </div>
@@ -339,30 +406,61 @@ const AddBannerModal: React.FC<AddBannerModalProps> = ({
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
-                    <option value="scheduled">Scheduled</option>
-                    <option value="expired">Expired</option>
                   </select>
                 </div>
 
                 <div className="form-group">
                   <label htmlFor="priority" className="form-label">
-                    Priority (1-10)
+                    Priority
                   </label>
-                  <input
-                    type="number"
+                  <select
                     id="priority"
                     name="priority"
                     value={formData.priority}
                     onChange={handleInputChange}
                     className={`form-input ${errors.priority ? 'error' : ''}`}
-                    min="1"
-                    max="10"
-                  />
+                  >
+                    <option value="1">1 (First Position)</option>
+                    <option value="2">2 (Second Position)</option>
+                    <option value="3">3 (Third Position)</option>
+                  </select>
                   {errors.priority && <span className="error-message">{errors.priority}</span>}
                 </div>
               </div>
             </div>
 
+            {/* Save Details Button - Before Image Section */}
+            <div style={{ padding: '20px', borderTop: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', margin: '20px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleSaveDetails}
+                  disabled={isSavingBanner || bannerSaved}
+                  style={{
+                    padding: '12px 30px',
+                    background: bannerSaved ? '#81c784' : '#4caf50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: (isSavingBanner || bannerSaved) ? 'not-allowed' : 'pointer',
+                    opacity: bannerSaved ? 0.7 : 1,
+                    fontSize: '16px',
+                    fontWeight: '500',
+                    boxShadow: bannerSaved ? 'none' : '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  {isSavingBanner ? (
+                    <span>💾 Saving Details...</span>
+                  ) : bannerSaved ? (
+                    <span>✅ Details Saved</span>
+                  ) : (
+                    <span>💾 Save Details</span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Image Section - Moved to bottom after all details */}
             <div className="banner-form-section">
               <h3 className="section-title">
                 <span className="section-icon">🖼️</span>
@@ -371,57 +469,112 @@ const AddBannerModal: React.FC<AddBannerModalProps> = ({
 
               {(imagePreview || formData.image) && (
                 <div className="image-preview-container">
-                  <img 
-                    src={imagePreview || formData.image} 
-                    alt="Banner preview" 
+                  <img
+                    src={imagePreview || formData.image}
+                    alt="Banner preview"
                     className="image-preview"
                   />
-                  <button 
-                    type="button" 
-                    className="remove-image-btn"
-                    onClick={handleRemoveFile}
-                  >
-                    ✕
-                  </button>
+                  {!editingBanner && (
+                    <button
+                      type="button"
+                      className="remove-image-btn"
+                      onClick={handleRemoveFile}
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               )}
-              
-              <div className="file-upload-container">
-                <div className="file-upload-area">
-                  <input
-                    type="file"
-                    id="file-upload"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="file-input"
-                  />
-                  <label htmlFor="file-upload" className="file-upload-label">
-                    <span className="upload-icon">📷</span>
-                    <span className="upload-text">
-                      {selectedFile ? 'Change Image' : 'Choose Banner Image'}
-                    </span>
-                    <span className="upload-hint">JPG, PNG, GIF (max 5MB)</span>
-                  </label>
+
+              {editingBanner ? (
+                // When editing, show image inputs as disabled (read-only)
+                <div className="file-upload-container">
+                  <div className="file-upload-area" style={{
+                    opacity: 0.5,
+                    pointerEvents: 'none',
+                    cursor: 'not-allowed'
+                  }}>
+                    <input
+                      type="file"
+                      id="file-upload"
+                      accept="image/*"
+                      disabled={true}
+                      className="file-input"
+                    />
+                    <label htmlFor="file-upload" className="file-upload-label" style={{
+                      cursor: 'not-allowed'
+                    }}>
+                      <span className="upload-icon">📷</span>
+                      <span className="upload-text">Choose Banner Image</span>
+                      <span className="upload-hint">JPG, PNG, GIF (max 5MB)</span>
+                    </label>
+                  </div>
+
+                  <div className="upload-divider">
+                    <span>OR</span>
+                  </div>
+
+                  <div className="url-input-container">
+                    <input
+                      type="url"
+                      id="image"
+                      name="image"
+                      value={formData.image}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      placeholder="Enter image URL"
+                      disabled={true}
+                      style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                    />
+                  </div>
                 </div>
-                
-                <div className="upload-divider">
-                  <span>OR</span>
-                </div>
-                
-                <div className="url-input-container">
-                  <input
-                    type="url"
-                    id="image"
-                    name="image"
-                    value={formData.image}
-                    onChange={handleInputChange}
-                    className="form-input"
-                    placeholder="Enter image URL"
-                    disabled={!!selectedFile}
-                  />
-                </div>
-              </div>
-              {errors.image && <span className="error-message">{errors.image}</span>}
+              ) : (
+                // When creating new banner, show upload options
+                <>
+                  <div className="file-upload-container">
+                    <div className="file-upload-area" style={{
+                      opacity: bannerSaved ? 1 : 0.6,
+                      pointerEvents: bannerSaved ? 'auto' : 'none'
+                    }}>
+                      <input
+                        type="file"
+                        id="file-upload"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="file-input"
+                        disabled={!bannerSaved}
+                      />
+                      <label htmlFor="file-upload" className="file-upload-label" style={{
+                        cursor: bannerSaved ? 'pointer' : 'not-allowed'
+                      }}>
+                        <span className="upload-icon">📷</span>
+                        <span className="upload-text">
+                          {selectedFile ? 'Change Image' : bannerSaved ? 'Choose Banner Image' : 'Save details first'}
+                        </span>
+                        <span className="upload-hint">JPG, PNG, GIF (max 5MB)</span>
+                      </label>
+                    </div>
+
+                    <div className="upload-divider">
+                      <span>OR</span>
+                    </div>
+
+                    <div className="url-input-container">
+                      <input
+                        type="url"
+                        id="image"
+                        name="image"
+                        value={formData.image}
+                        onChange={handleInputChange}
+                        className="form-input"
+                        placeholder="Enter image URL"
+                        disabled={!!selectedFile}
+                      />
+                    </div>
+                  </div>
+                  {errors.image && <span className="error-message">{errors.image}</span>}
+                </>
+              )}
 
               <div className="form-group">
                 <label htmlFor="imageAlt" className="form-label">
@@ -438,91 +591,48 @@ const AddBannerModal: React.FC<AddBannerModalProps> = ({
                 />
               </div>
             </div>
-
-            <div className="banner-form-section">
-              <h3 className="section-title">
-                <span className="section-icon">🔗</span>
-                Link & Scheduling
-              </h3>
-
-              <div className="form-group">
-                <label htmlFor="linkUrl" className="form-label">
-                  Link URL
-                </label>
-                <input
-                  type="url"
-                  id="linkUrl"
-                  name="linkUrl"
-                  value={formData.linkUrl}
-                  onChange={handleInputChange}
-                  className="form-input"
-                  placeholder="https://example.com"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="linkText" className="form-label">
-                  Link Text
-                </label>
-                <input
-                  type="text"
-                  id="linkText"
-                  name="linkText"
-                  value={formData.linkText}
-                  onChange={handleInputChange}
-                  className="form-input"
-                  placeholder="Click here"
-                />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="startDate" className="form-label">
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    id="startDate"
-                    name="startDate"
-                    value={formData.startDate}
-                    onChange={handleInputChange}
-                    className="form-input"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="endDate" className="form-label">
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    id="endDate"
-                    name="endDate"
-                    value={formData.endDate}
-                    onChange={handleInputChange}
-                    className={`form-input ${errors.endDate ? 'error' : ''}`}
-                  />
-                  {errors.endDate && <span className="error-message">{errors.endDate}</span>}
-                </div>
-              </div>
-            </div>
           </div>
 
-          <div className="banner-modal-footer">
+          {/* Error message */}
+          {submitError && (
+            <div style={{ padding: '10px', margin: '10px 20px', background: '#fee', color: '#c33', borderRadius: '4px', border: '1px solid #fcc' }}>
+              <strong>Error:</strong> {submitError}
+            </div>
+          )}
+
+          <div className="banner-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
               onClick={handleClose}
               className="btn-cancel"
-              disabled={isSubmitting}
+              disabled={isSavingBanner || isUploadingImage}
             >
               Cancel
             </button>
+
+            {/* Save All Button - Uploads image and completes (or just closes when editing) */}
             <button
-              type="submit"
-              className="btn-add"
-              disabled={isSubmitting}
+              type="button"
+              onClick={handleSaveAll}
+              disabled={!bannerSaved || isUploadingImage}
+              style={{
+                padding: '10px 20px',
+                background: (!bannerSaved || isUploadingImage) ? '#ccc' : '#2196f3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: (!bannerSaved || isUploadingImage) ? 'not-allowed' : 'pointer'
+              }}
             >
-              {isSubmitting ? 'Saving...' : editingBanner ? 'Update Banner' : 'Create Banner'}
+              {isUploadingImage ? (
+                <span>📤 Uploading Image...</span>
+              ) : !bannerSaved ? (
+                <span>💾 Save Details First</span>
+              ) : editingBanner ? (
+                <span>✅ Update Banner</span>
+              ) : (
+                <span>💾 {selectedFile ? 'Save All' : 'Complete'}</span>
+              )}
             </button>
           </div>
         </form>

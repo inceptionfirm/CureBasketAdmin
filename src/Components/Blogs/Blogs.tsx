@@ -28,9 +28,6 @@ interface Blog {
   publishedAt?: string;
   createdAt: string;
   updatedAt: string;
-  views: number;
-  likes: number;
-  comments: number;
   seoTitle: string;
   seoDescription: string;
   seoKeywords: string[];
@@ -41,9 +38,6 @@ interface BlogStats {
   publishedBlogs: number;
   draftBlogs: number;
   archivedBlogs: number;
-  totalViews: number;
-  totalLikes: number;
-  totalComments: number;
 }
 
 const Blogs: React.FC = () => {
@@ -54,28 +48,32 @@ const Blogs: React.FC = () => {
     totalBlogs: 0,
     publishedBlogs: 0,
     draftBlogs: 0,
-    archivedBlogs: 0,
-    totalViews: 0,
-    totalLikes: 0,
-    totalComments: 0
+    archivedBlogs: 0
   });
   const [isAddBlogModalOpen, setIsAddBlogModalOpen] = useState(false);
   const [editingBlog, setEditingBlog] = useState<Blog | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+    totalPages: 1
+  });
 
   // Helper function to map API blog to frontend format
   const mapApiBlogToFrontend = (apiBlog: any): Blog => {
     // Debug: Log the API blog data to see what fields are available
     console.log('📝 Mapping API blog:', {
       id: apiBlog.id,
-      itemName: apiBlog.itemName,
-      itemHeading: apiBlog.itemHeading,
-      itemDescription: apiBlog.itemDescription,
+      title: apiBlog.title,
+      content: apiBlog.content,
+      excerpt: apiBlog.excerpt,
+      category: apiBlog.category,
+      status: apiBlog.status,
       fullBlog: apiBlog
     });
-    
+
     // Map status from API (DRAFT, PUBLISHED, ARCHIVED) to frontend format (draft, published, archived)
     let status: 'draft' | 'published' | 'archived' = 'draft';
     if (apiBlog.status) {
@@ -90,89 +88,147 @@ const Blogs: React.FC = () => {
     } else if (apiBlog.active === true) {
       status = 'published';
     }
-    
+
     // Map title - check multiple possible fields from API
-    const title = apiBlog.itemName || 
-                  apiBlog.itemHeading || 
-                  apiBlog.title || 
-                  apiBlog.name || 
-                  'Untitled';
-    
+    // API might return: title, itemName, itemHeading, name
+    const title = apiBlog.title ||
+      apiBlog.itemName ||
+      apiBlog.itemHeading ||
+      apiBlog.name ||
+      'Untitled';
+
     // Map slug/heading
-    const slug = apiBlog.itemHeading || 
-                 apiBlog.slug || 
-                 apiBlog.itemName?.toLowerCase().replace(/\s+/g, '-') || 
-                 title?.toLowerCase().replace(/\s+/g, '-') || 
-                 '';
-    
-    console.log('📝 Mapped title:', title, 'from itemName:', apiBlog.itemName, 'itemHeading:', apiBlog.itemHeading);
-    
+    const slug = apiBlog.itemHeading ||
+      apiBlog.slug ||
+      apiBlog.itemName?.toLowerCase().replace(/\s+/g, '-') ||
+      title?.toLowerCase().replace(/\s+/g, '-') ||
+      '';
+
+    // console.log('📝 Mapped title:', title, 'from itemName:', apiBlog.itemName, 'itemHeading:', apiBlog.itemHeading);
+
     // Map image - check multiple possible fields
-    // API might return images in: imageUrl, image, thumbnail, featuredImage, files array, or mainAttributes
+    // API might return images in: image, imageUrl, thumbnail, featuredImage, fileUrl, files array, or mainAttributes
+    // Extract image from multiple possible sources
     let featuredImage = '';
-    if (apiBlog.imageUrl) {
-      featuredImage = apiBlog.imageUrl;
-    } else if (apiBlog.image) {
+
+    // First check direct image fields (in order of priority)
+    if (apiBlog.image) {
       featuredImage = apiBlog.image;
+    } else if (apiBlog.imageUrl) {
+      featuredImage = apiBlog.imageUrl;
     } else if (apiBlog.thumbnail) {
       featuredImage = apiBlog.thumbnail;
     } else if (apiBlog.featuredImage) {
       featuredImage = apiBlog.featuredImage;
+    } else if (apiBlog.fileUrl) {
+      featuredImage = apiBlog.fileUrl;
+    } else if (typeof apiBlog.files === 'string') {
+      // If files is a string (comma-separated URLs)
+      featuredImage = apiBlog.files.split(',')[0].trim();
     } else if (apiBlog.files && Array.isArray(apiBlog.files) && apiBlog.files.length > 0) {
-      // Check if files array has image URLs
-      const imageFile = apiBlog.files.find((f: any) => 
-        f.url || f.fileUrl || f.documentUrl || (f.documentType && f.documentType === 'IMAGE')
-      );
-      if (imageFile) {
-        featuredImage = imageFile.url || imageFile.fileUrl || imageFile.documentUrl || '';
+      // API returns files array with docPath field
+      // Use the first file's docPath (API structure: files[0].docPath)
+      const firstFile = apiBlog.files[0];
+      if (firstFile) {
+        if (typeof firstFile === 'string') {
+          // If file is a string, use it directly
+          featuredImage = firstFile;
+        } else if (firstFile.docPath) {
+          // API returns docPath field (e.g., "/files/CATALOG_ITEM/image.png")
+          featuredImage = firstFile.docPath;
+        } else {
+          // Fallback to other possible field names
+          featuredImage = firstFile.fileUrl || 
+                         firstFile.url || 
+                         firstFile.file_path || 
+                         firstFile.path || 
+                         firstFile.documentUrl || '';
+        }
       }
     } else if (apiBlog.mainAttributes && Array.isArray(apiBlog.mainAttributes)) {
       // Check mainAttributes for image links
-      const imageAttr = apiBlog.mainAttributes.find((attr: any) => 
-        attr.name && (attr.name.toLowerCase().includes('image') || attr.name.toLowerCase().includes('photo'))
+      const imageAttr = apiBlog.mainAttributes.find((attr: any) =>
+        attr.name && (
+          attr.name.toLowerCase().includes('image') ||
+          attr.name.toLowerCase().includes('photo') ||
+          attr.name.toLowerCase().includes('picture') ||
+          attr.name.toLowerCase().includes('file')
+        ) && attr.value
       );
       if (imageAttr && imageAttr.value) {
         featuredImage = imageAttr.value;
       }
     }
-    
-    console.log('📝 Mapped image:', featuredImage, 'from API blog:', {
-      imageUrl: apiBlog.imageUrl,
-      image: apiBlog.image,
-      files: apiBlog.files,
-      mainAttributes: apiBlog.mainAttributes
+
+    // Normalize image URL (add base URL if relative)
+    // Images are served from https://java.api.curebasket.com (without /backend)
+    // Example: "/files/MEDICINE/image.png" -> "https://java.api.curebasket.com/files/MEDICINE/image.png"
+    const normalizeImageUrl = (imgUrl: string): string => {
+      if (!imgUrl || imgUrl.trim() === '') return '';
+      
+      // If already a full URL, return as is
+      if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://') || imgUrl.startsWith('data:')) {
+        return imgUrl;
+      }
+      
+      // Base URL for images (without /backend)
+      const imageBaseURL = 'https://java.api.curebasket.com';
+      
+      // If path starts with /, append directly, otherwise add /
+      if (imgUrl.startsWith('/')) {
+        return `${imageBaseURL}${imgUrl}`;
+      } else {
+        return `${imageBaseURL}/${imgUrl}`;
+      }
+    };
+
+    // Normalize the image URL to full URL
+    featuredImage = normalizeImageUrl(featuredImage);
+
+    // Debug log to verify image URLs
+    console.log('📝 Blog image mapped:', {
+      blogId: apiBlog.id || apiBlog.ID,
+      originalImage: apiBlog.image || apiBlog.imageUrl || apiBlog.files?.[0]?.docPath || apiBlog.files?.[0] || 'none',
+      filesArray: apiBlog.files,
+      normalizedUrl: featuredImage,
+      source: apiBlog.image ? 'image' : apiBlog.imageUrl ? 'imageUrl' : apiBlog.files ? 'files' : apiBlog.mainAttributes ? 'attributes' : 'none'
     });
+
+    // Map content and excerpt - API returns these directly
+    const content = apiBlog.content || apiBlog.itemDescription || '';
+    const excerpt = apiBlog.excerpt || apiBlog.itemDescription || content.substring(0, 150) || '';
     
+    // Map category - API returns category as string
+    const categoryName = apiBlog.category || apiBlog.categoryName || 'Uncategorized';
+    const categoryId = String(apiBlog.categoryId || apiBlog.id || '');
+
     // Map API blog format to frontend Blog format
     return {
       id: String(apiBlog.id || ''),
       title: title,
       slug: slug,
-      content: apiBlog.itemDescription || apiBlog.content || '',
-      excerpt: apiBlog.itemDescription || apiBlog.excerpt || '',
+      content: content,
+      excerpt: excerpt,
       featuredImage: featuredImage,
       author: {
-        id: '1',
-        name: apiBlog.author || 'Admin',
-        email: '',
-        avatar: ''
+        id: String(apiBlog.authorId || apiBlog.userId || '1'),
+        name: apiBlog.author || apiBlog.authorName || 'Admin',
+        email: apiBlog.authorEmail || '',
+        avatar: apiBlog.authorAvatar || ''
       },
       category: {
-        id: String(apiBlog.categoryId || ''),
-        name: 'Uncategorized',
-        slug: 'uncategorized'
+        id: categoryId,
+        name: categoryName,
+        slug: categoryName.toLowerCase().replace(/\s+/g, '-')
       },
-      tags: Array.isArray(apiBlog.tags) ? apiBlog.tags : [],
+      tags: Array.isArray(apiBlog.tags) ? apiBlog.tags : (apiBlog.tags ? [apiBlog.tags] : []),
       status: status,
-      publishedAt: apiBlog.publishDate,
-      createdAt: apiBlog.createdAt || new Date().toISOString(),
-      updatedAt: apiBlog.updatedAt || apiBlog.createdAt || new Date().toISOString(),
-      views: 0,
-      likes: 0,
-      comments: 0,
-      seoTitle: apiBlog.itemName || '',
-      seoDescription: apiBlog.itemDescription || '',
-      seoKeywords: apiBlog.tags || []
+      publishedAt: apiBlog.publishDate || apiBlog.publishedAt,
+      createdAt: apiBlog.createdAt || apiBlog.createdDate || new Date().toISOString(),
+      updatedAt: apiBlog.updatedAt || apiBlog.updatedDate || apiBlog.createdAt || new Date().toISOString(),
+      seoTitle: apiBlog.seoTitle || apiBlog.seo_title || title,
+      seoDescription: apiBlog.seoDescription || apiBlog.seo_description || excerpt,
+      seoKeywords: Array.isArray(apiBlog.seoKeywords) ? apiBlog.seoKeywords : (apiBlog.tags || [])
     };
   };
 
@@ -180,9 +236,9 @@ const Blogs: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       console.log('📝 Loading blogs from API...');
-      
+
       // Build query parameters
       // Note: sortBy allowed values: ID, ItemType, Category, Status, Title, Content, Excerpt, SEO_Title, SEO_Description
       // Backend requires status parameter - based on API docs example: status=ACTIVE
@@ -194,53 +250,61 @@ const Blogs: React.FC = () => {
         sortBy: 'ID', // Use ID instead of publishDate (not supported)
         sortOrder: 'DESC'
       };
-      
+
       // Backend REQUIRES status/type parameter - cannot be omitted
       // When "All Statuses" is selected (empty filter), fetch all statuses and combine them
       if (!statusFilter || statusFilter.trim() === '') {
         // Fetch blogs with all statuses and combine them
         console.log('📝 No status filter - fetching all statuses (DRAFT, PUBLISHED, ARCHIVED)');
-        
+
         try {
           const allBlogs: Blog[] = [];
-          
+
           // Fetch DRAFT blogs
           const draftParams = { ...params, status: 'DRAFT', type: 'DRAFT' };
           const draftResponse = await blogService.getAllBlogs('ADMIN', draftParams);
           if (draftResponse.blogs) {
             allBlogs.push(...draftResponse.blogs.map(mapApiBlogToFrontend));
           }
-          
+
           // Fetch PUBLISHED blogs
           const publishedParams = { ...params, status: 'PUBLISHED', type: 'PUBLISHED' };
           const publishedResponse = await blogService.getAllBlogs('ADMIN', publishedParams);
           if (publishedResponse.blogs) {
             allBlogs.push(...publishedResponse.blogs.map(mapApiBlogToFrontend));
           }
-          
+
           // Fetch ARCHIVED blogs
           const archivedParams = { ...params, status: 'ARCHIVED', type: 'ARCHIVED' };
           const archivedResponse = await blogService.getAllBlogs('ADMIN', archivedParams);
           if (archivedResponse.blogs) {
             allBlogs.push(...archivedResponse.blogs.map(mapApiBlogToFrontend));
           }
-          
+
           // Sort by ID descending (newest first)
           allBlogs.sort((a, b) => {
             const aId = parseInt(a.id) || 0;
             const bId = parseInt(b.id) || 0;
             return bId - aId;
           });
-          
+
           console.log('📝 Combined blogs from all statuses:', allBlogs.length);
-          setBlogs(allBlogs);
+          console.log('📝 Sample blog after mapping:', allBlogs[0]);
+          if (allBlogs.length > 0) {
+            setBlogs(allBlogs);
+            console.log('✅ Blogs set in state:', allBlogs.length);
+          } else {
+            console.warn('⚠️ No blogs to set');
+            setBlogs([]);
+          }
+          setLoading(false);
           return; // Exit early since we've handled the "all statuses" case
         } catch (err) {
           console.error('❌ Error fetching all statuses:', err);
           // Fall through to single status fetch as fallback
         }
       }
-      
+
       // Single status filter selected - map frontend status to backend format
       let statusValue: string = 'DRAFT'; // Default
       if (statusFilter && statusFilter.trim() !== '') {
@@ -253,50 +317,48 @@ const Blogs: React.FC = () => {
           statusValue = 'DRAFT';
         }
       }
-      
+
       // Backend requires both 'status' and 'type' parameters (error mentions "Type")
       params.status = statusValue;
       params.type = statusValue;
-      
-      if (categoryFilter) {
-        params.categoryId = categoryFilter;
-      }
-      
+
+
       // Remove any null/undefined/empty values to prevent sending them as query params
       Object.keys(params).forEach(key => {
         if (params[key] === null || params[key] === undefined || params[key] === '') {
           delete params[key];
         }
       });
-      
+
       console.log('📝 Blog list query params (final):', params);
       console.log('📝 Status value being sent:', params.status);
-      
+
       // Call the API
       const response = await blogService.getAllBlogs('ADMIN', params);
       console.log('📝 Blogs API response:', response);
-      
+
       // Check if response has blogs array, if not, use empty array
       const blogsArray = response.blogs || [];
       console.log('📝 Blogs array from response:', blogsArray);
-      
+
       // Map API response to frontend Blog format using helper function
       const mappedBlogs: Blog[] = blogsArray.map(mapApiBlogToFrontend);
-      
-      console.log('📝 Mapped blogs:', mappedBlogs);
+
+      console.log('📝 Mapped blogs count:', mappedBlogs.length);
+      console.log('📝 Sample mapped blog:', mappedBlogs[0]);
       setBlogs(mappedBlogs);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load blogs');
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, statusFilter, categoryFilter]);
+  }, []); // Only load once on mount - filtering is done client-side
 
   const loadStats = useCallback(async () => {
     try {
       // Fetch blogs from all statuses to calculate stats dynamically
       const allBlogs: Blog[] = [];
-      
+
       try {
         // Fetch DRAFT blogs
         const draftParams = { itemType: 'BLOG', page: 0, pageSize: 1000, status: 'DRAFT', type: 'DRAFT', sortBy: 'ID', sortOrder: 'DESC' };
@@ -304,14 +366,14 @@ const Blogs: React.FC = () => {
         if (draftResponse.blogs) {
           allBlogs.push(...draftResponse.blogs.map(mapApiBlogToFrontend));
         }
-        
+
         // Fetch PUBLISHED blogs
         const publishedParams = { itemType: 'BLOG', page: 0, pageSize: 1000, status: 'PUBLISHED', type: 'PUBLISHED', sortBy: 'ID', sortOrder: 'DESC' };
         const publishedResponse = await blogService.getAllBlogs('ADMIN', publishedParams);
         if (publishedResponse.blogs) {
           allBlogs.push(...publishedResponse.blogs.map(mapApiBlogToFrontend));
         }
-        
+
         // Fetch ARCHIVED blogs
         const archivedParams = { itemType: 'BLOG', page: 0, pageSize: 1000, status: 'ARCHIVED', type: 'ARCHIVED', sortBy: 'ID', sortOrder: 'DESC' };
         const archivedResponse = await blogService.getAllBlogs('ADMIN', archivedParams);
@@ -321,36 +383,25 @@ const Blogs: React.FC = () => {
       } catch (fetchError) {
         console.error('Error fetching blogs for stats:', fetchError);
       }
-      
+
       // Calculate stats from fetched blogs
       let publishedBlogs = 0;
       let draftBlogs = 0;
       let archivedBlogs = 0;
-      let totalViews = 0;
-      let totalLikes = 0;
-      let totalComments = 0;
-      
       allBlogs.forEach((blog) => {
         const status = blog.status?.toLowerCase() || '';
         if (status === 'published') publishedBlogs++;
         else if (status === 'draft') draftBlogs++;
         else if (status === 'archived') archivedBlogs++;
-        
-        totalViews += blog.views || 0;
-        totalLikes += blog.likes || 0;
-        totalComments += blog.comments || 0;
       });
-      
+
       const calculatedStats: BlogStats = {
         totalBlogs: allBlogs.length,
         publishedBlogs,
         draftBlogs,
-        archivedBlogs,
-        totalViews,
-        totalLikes,
-        totalComments
+        archivedBlogs
       };
-      
+
       console.log('📝 Blog Stats Calculated:', calculatedStats);
       setStats(calculatedStats);
     } catch (err) {
@@ -360,10 +411,7 @@ const Blogs: React.FC = () => {
         totalBlogs: 0,
         publishedBlogs: 0,
         draftBlogs: 0,
-        archivedBlogs: 0,
-        totalViews: 0,
-        totalLikes: 0,
-        totalComments: 0
+        archivedBlogs: 0
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -371,13 +419,15 @@ const Blogs: React.FC = () => {
 
   useEffect(() => {
     loadBlogs();
-  }, [loadBlogs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Load blogs only once on mount
 
   useEffect(() => {
     loadStats();
-  }, [loadStats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Load stats only once on mount
 
-  const handleAddBlog = async (blogData: any) => {
+  const handleAddBlog = async (blogData: any): Promise<number | null> => {
     try {
       setError(null);
 
@@ -393,11 +443,11 @@ const Blogs: React.FC = () => {
           status = 'DRAFT';
         }
       }
-      
+
       if (editingBlog) {
         // For update: build payload with only fields that are being updated
         const updatePayload: any = {};
-        
+
         if (blogData.itemType !== undefined) updatePayload.itemType = blogData.itemType || 'BLOG';
         if (blogData.category !== undefined) updatePayload.category = blogData.category;
         if (blogData.status !== undefined) updatePayload.status = status;
@@ -406,7 +456,7 @@ const Blogs: React.FC = () => {
         if (blogData.excerpt !== undefined) updatePayload.excerpt = blogData.excerpt;
         if (blogData.seoTitle !== undefined) updatePayload.seoTitle = blogData.seoTitle;
         if (blogData.seoDescription !== undefined) updatePayload.seoDescription = blogData.seoDescription;
-        
+
         // Handle legacy field mappings for update
         if (blogData.itemName !== undefined && !updatePayload.title) {
           updatePayload.title = blogData.itemName;
@@ -417,20 +467,21 @@ const Blogs: React.FC = () => {
         if (blogData.categoryId !== undefined && !updatePayload.category) {
           updatePayload.category = blogData.categoryId.toString();
         }
-        
+
         // Remove empty/null values
         Object.keys(updatePayload).forEach(key => {
           if (updatePayload[key] === null || updatePayload[key] === undefined || updatePayload[key] === '') {
             delete updatePayload[key];
           }
         });
-        
+
         if (Object.keys(updatePayload).length === 0) {
           throw new Error('No fields to update');
         }
-        
+
         const blogId = typeof editingBlog.id === 'string' ? Number(editingBlog.id) : editingBlog.id;
         await blogService.updateBlog(blogId, updatePayload);
+        return blogId;
       } else {
         // For create: send all required fields matching curl structure exactly
         // Map form fields to API payload structure
@@ -441,13 +492,13 @@ const Blogs: React.FC = () => {
           title: blogData.title || blogData.itemName || '',
           content: blogData.content || blogData.itemDescription || '',
           excerpt: blogData.excerpt || '',
-          seoTitle: blogData.seoTitle || blogData.title || '',
-          seoDescription: blogData.seoDescription || blogData.excerpt || ''
+          seoTitle: blogData.seoTitle || '', // Use actual seoTitle from form, not fallback
+          seoDescription: blogData.seoDescription || '' // Use actual seoDescription from form, not fallback
         };
-        
+
         console.log('📝 Blog create - Form data received:', blogData);
         console.log('📝 Blog create - Mapped payload before cleanup:', createPayload);
-        
+
         // Remove only null/undefined values, but keep empty strings for optional fields
         // Required fields: itemType, status, title - always keep these
         Object.keys(createPayload).forEach(key => {
@@ -460,27 +511,33 @@ const Blogs: React.FC = () => {
             delete createPayload[key];
           }
         });
-        
+
         console.log('📝 Blog create - Final payload:', JSON.stringify(createPayload, null, 2));
-        
+
         // Validate required fields
         if (!createPayload.title) {
           throw new Error('Blog title is required');
         }
-        
-        await blogService.createBlog(createPayload);
+
+        // Create blog first (without image)
+        const createResult = await blogService.createBlog(createPayload);
+        console.log('✅ Blog created successfully:', createResult);
+
+        // Get the blog ID from response
+        if (createResult.data?.id) {
+          const newBlogId = Number(createResult.data.id);
+          console.log('📝 New blog ID:', newBlogId);
+          return newBlogId;
+        } else {
+          throw new Error('Blog created but no ID returned');
+        }
       }
-      
-      await loadBlogs();
-      await loadStats();
-      setIsAddBlogModalOpen(false);
-      setEditingBlog(null);
     } catch (err: any) {
       console.error('❌ Error saving blog - Full error:', err);
-      
+
       // Extract detailed error message
       let errorMessage = 'Failed to save blog';
-      
+
       if (err instanceof Error) {
         errorMessage = err.message;
       } else if (err?.error) {
@@ -490,7 +547,7 @@ const Blogs: React.FC = () => {
       } else if (typeof err === 'string') {
         errorMessage = err;
       }
-      
+
       // Check if there's a response with error details
       if (err?.data) {
         const errorData = err.data;
@@ -502,13 +559,29 @@ const Blogs: React.FC = () => {
           errorMessage = errorData;
         }
       }
-      
+
       console.error('❌ Error message to display:', errorMessage);
       setError(errorMessage);
-      
-      // Don't close modal on error so user can fix and retry
-      // setIsAddBlogModalOpen(false);
-      // setEditingBlog(null);
+      throw err; // Re-throw so modal can catch it
+    }
+  };
+
+  const handleImageUpload = async (blogId: number, file: File): Promise<void> => {
+    try {
+      setError(null);
+      console.log('📝 Uploading image for blog ID:', blogId);
+
+      await blogService.uploadFiles(blogId, [file]);
+      console.log('✅ Image uploaded successfully');
+
+      // Reload blogs list after successful image upload
+      await loadBlogs();
+      await loadStats();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to upload image';
+      console.error('❌ Error uploading image:', err);
+      setError(errorMessage);
+      throw err; // Re-throw so modal can catch it
     }
   };
 
@@ -546,15 +619,13 @@ const Blogs: React.FC = () => {
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
+    setPagination(prev => ({ ...prev, current: 1 })); // Reset to first page on search
   };
 
   const handleStatusFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setStatusFilter(e.target.value);
   };
 
-  const handleCategoryFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setCategoryFilter(e.target.value);
-  };
 
   const getStatusBadge = (status: string) => {
     const statusClasses = {
@@ -562,7 +633,7 @@ const Blogs: React.FC = () => {
       draft: 'status-draft',
       archived: 'status-archived'
     };
-    
+
     return (
       <span className={`blog-status ${statusClasses[status as keyof typeof statusClasses] || 'status-draft'}`}>
         {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -579,25 +650,37 @@ const Blogs: React.FC = () => {
   };
 
   const filteredBlogs = blogs.filter(blog => {
-    const matchesSearch = !searchTerm || 
-      blog.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      blog.excerpt.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = !statusFilter || blog.status === statusFilter;
-    const matchesCategory = !categoryFilter || blog.category.id === categoryFilter;
+    if (!blog || !blog.title) return false;
     
-    return matchesSearch && matchesStatus && matchesCategory;
+    const matchesSearch = !searchTerm ||
+      (blog.title && blog.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (blog.excerpt && blog.excerpt.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    // Map frontend status to match API status format
+    let blogStatus = blog.status?.toLowerCase() || '';
+    let filterStatus = statusFilter?.toLowerCase() || '';
+    
+    const matchesStatus = !statusFilter || blogStatus === filterStatus;
+    return matchesSearch && matchesStatus;
   });
 
-  if (loading) {
-    return (
-      <div className="blogs-page">
-        <div className="loading-state">
-          <div className="loading-spinner"></div>
-          <p>Loading blogs...</p>
-        </div>
-      </div>
-    );
-  }
+  // Apply pagination to filtered results
+  const paginatedBlogs = filteredBlogs.slice(
+    (pagination.current - 1) * pagination.pageSize,
+    pagination.current * pagination.pageSize
+  );
+
+  // Update pagination total based on filtered results
+  useEffect(() => {
+    const total = filteredBlogs.length;
+    const totalPages = Math.ceil(total / pagination.pageSize);
+    console.log('📝 Blog pagination update:', { total, totalPages, pageSize: pagination.pageSize, shouldShow: total > pagination.pageSize });
+    setPagination(prev => ({
+      ...prev,
+      total,
+      totalPages
+    }));
+  }, [filteredBlogs.length, pagination.pageSize]);
 
   return (
     <div className="blogs-page">
@@ -614,10 +697,16 @@ const Blogs: React.FC = () => {
           Add Blog Post
         </button>
       </div>
-      
+
+      {loading && (
+        <div style={{ padding: '1rem', textAlign: 'center', background: 'white', margin: '1rem', borderRadius: '8px' }}>
+          <p>Loading blogs...</p>
+        </div>
+      )}
+
       <div className="stats-section">
         <div className="stat-item">
-          <span className="stat-number">{stats.totalBlogs}</span>
+          <span className="stat-number">{loading ? '...' : stats.totalBlogs}</span>
           <div className="stat-label">Total Posts</div>
         </div>
         <div className="stat-item">
@@ -629,11 +718,11 @@ const Blogs: React.FC = () => {
           <div className="stat-label">Drafts</div>
         </div>
         <div className="stat-item">
-          <span className="stat-number">{stats.totalViews}</span>
-          <div className="stat-label">Total Views</div>
-            </div>
-          </div>
-          
+          <span className="stat-number">{stats.archivedBlogs}</span>
+          <div className="stat-label">Archived</div>
+        </div>
+      </div>
+
       <div className="search-filters">
         <div className="search-container">
           <input
@@ -644,7 +733,7 @@ const Blogs: React.FC = () => {
             className="search-input"
           />
         </div>
-        
+
         <div className="filters">
           <select
             value={statusFilter}
@@ -657,25 +746,20 @@ const Blogs: React.FC = () => {
             <option value="archived">Archived</option>
           </select>
 
-          <select
-            value={categoryFilter}
-            onChange={handleCategoryFilter}
-            className="filter-select"
-          >
-            <option value="">All Categories</option>
-            <option value="health">Health</option>
-            <option value="wellness">Wellness</option>
-            <option value="medicine">Medicine</option>
-            <option value="news">News</option>
-            <option value="tips">Tips</option>
-          </select>
-            </div>
-          </div>
-          
+        </div>
+      </div>
+
       {error && (
-        <div className="error-state">
-          <p>Error: {error}</p>
-            </div>
+        <div className="error-state" style={{ 
+          padding: '1rem', 
+          margin: '1rem', 
+          background: '#fee', 
+          color: '#c33', 
+          borderRadius: '8px',
+          border: '1px solid #fcc'
+        }}>
+          <p><strong>Error:</strong> {error}</p>
+        </div>
       )}
 
       <div className="blogs-section">
@@ -683,7 +767,7 @@ const Blogs: React.FC = () => {
           <h2 className="section-title">Blog Posts</h2>
           <p className="section-subtitle">Manage your blog content and track performance</p>
         </div>
-        
+
         {filteredBlogs.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📝</div>
@@ -698,87 +782,132 @@ const Blogs: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="blogs-list">
-            {filteredBlogs.map((blog) => (
-              <div key={blog.id} className="blog-item">
-                <div className="blog-image">
-                  {blog.featuredImage ? (
-                    <img src={blog.featuredImage} alt={blog.title} />
-                  ) : (
-                    <div className="blog-image-placeholder">📝</div>
-                  )}
-                </div>
-                
-                <div className="blog-content">
-                  <div className="blog-header">
-                    <h3 className="blog-title">{blog.title}</h3>
-                    {getStatusBadge(blog.status)}
-                  </div>
-                  
-                  <p className="blog-excerpt">{blog.excerpt}</p>
-                  
-                  <div className="blog-meta">
-                    <span className="blog-author">By {blog.author.name}</span>
-                    <span className="blog-category">{blog.category.name}</span>
-                    <span className="blog-date">
-                      {blog.publishedAt ? formatDate(blog.publishedAt) : formatDate(blog.createdAt)}
-                    </span>
-                  </div>
-                  
-                  <div className="blog-stats">
-                    <span className="stat">
-                      <span className="stat-icon">👁️</span>
-                      {blog.views}
-                    </span>
-                    <span className="stat">
-                      <span className="stat-icon">❤️</span>
-                      {blog.likes}
-                    </span>
-                    <span className="stat">
-                      <span className="stat-icon">💬</span>
-                      {blog.comments}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="blog-actions">
-                  <button
-                    className="btn-edit"
-                    onClick={() => handleEditBlog(blog)}
-                  >
-                    ✏️
-                  </button>
-                  
-                  {blog.status === 'draft' && (
-                    <button
-                      className="btn-save"
-                      onClick={() => handlePublishBlog(blog.id)}
-                      title="Publish"
-                    >
-                      📤
-                    </button>
-                  )}
-                  
-                  <button
-                    className="btn-delete"
-                    onClick={() => handleDeleteBlog(blog.id)}
-                  >
-                    🗑️
-                  </button>
-                </div>
+          <>
+            {/* Pagination - Above the list */}
+            {filteredBlogs.length > pagination.pageSize && (
+              <div className="pagination" style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '20px',
+                marginBottom: '20px'
+              }}>
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, current: prev.current - 1 }))}
+                  disabled={pagination.current === 1}
+                  style={{
+                    padding: '8px 16px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    background: pagination.current === 1 ? '#f5f5f5' : 'white',
+                    cursor: pagination.current === 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Previous
+                </button>
+                <span style={{ padding: '0 10px' }}>
+                  Page {pagination.current} of {pagination.totalPages} ({pagination.total} total)
+                </span>
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, current: prev.current + 1 }))}
+                  disabled={pagination.current >= pagination.totalPages}
+                  style={{
+                    padding: '8px 16px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    background: pagination.current >= pagination.totalPages ? '#f5f5f5' : 'white',
+                    cursor: pagination.current >= pagination.totalPages ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Next
+                </button>
               </div>
-            ))}
-          </div>
+            )}
+
+            <div className="blogs-list">
+              {paginatedBlogs.map((blog) => (
+                <div key={blog.id} className="blog-item">
+                  <div className="blog-image">
+                    {blog.featuredImage ? (
+                      <img 
+                        src={blog.featuredImage} 
+                        alt={blog.title}
+                        onError={(e) => {
+                          console.error('❌ Image failed to load:', blog.featuredImage);
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                        onLoad={() => {
+                          console.log('✅ Image loaded successfully:', blog.featuredImage);
+                        }}
+                      />
+                    ) : null}
+                    {!blog.featuredImage && (
+                      <div className="blog-image-placeholder">📝</div>
+                    )}
+                  </div>
+
+                  <div className="blog-content">
+                    <div className="blog-header">
+                      <h3 className="blog-title">{blog.title}</h3>
+                      {getStatusBadge(blog.status)}
+                    </div>
+
+                    <p className="blog-excerpt">{blog.excerpt}</p>
+
+                    <div className="blog-meta">
+                      <span className="blog-author">By {blog.author.name}</span>
+                      <span className="blog-category">{blog.category.name}</span>
+                      <span className="blog-date">
+                        {blog.publishedAt ? formatDate(blog.publishedAt) : formatDate(blog.createdAt)}
+                      </span>
+                    </div>
+
+                  </div>
+
+                  <div className="blog-actions">
+                    <button
+                      className="btn-edit"
+                      onClick={() => handleEditBlog(blog)}
+                    >
+                      ✏️
+                    </button>
+
+                    {blog.status === 'draft' && (
+                      <button
+                        className="btn-save"
+                        onClick={() => handlePublishBlog(blog.id)}
+                        title="Publish"
+                      >
+                        📤
+                      </button>
+                    )}
+
+                    <button
+                      className="btn-delete"
+                      onClick={() => handleDeleteBlog(blog.id)}
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
       <AddBlogModal
         isOpen={isAddBlogModalOpen}
-        onClose={() => {
+        onClose={async () => {
           setIsAddBlogModalOpen(false);
           setEditingBlog(null);
+          await loadBlogs();
+          await loadStats();
         }}
         onSubmit={handleAddBlog}
+        onImageUpload={handleImageUpload}
         editingBlog={editingBlog}
       />
     </div>

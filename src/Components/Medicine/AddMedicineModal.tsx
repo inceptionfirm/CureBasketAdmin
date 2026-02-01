@@ -5,7 +5,8 @@ import './AddMedicineModal.css';
 interface AddMedicineModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (medicineData: MedicineFormData) => void;
+  onSubmit: (medicineData: MedicineFormData) => Promise<number | null>; // Returns medicine ID
+  onImageUpload?: (medicineId: number, file: File) => Promise<void>; // Separate image upload
   editingMedicine?: Medicine | null;
 }
 
@@ -29,6 +30,7 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
   isOpen, 
   onClose, 
   onSubmit, 
+  onImageUpload,
   editingMedicine 
 }) => {
   const [formData, setFormData] = useState<MedicineFormData>({
@@ -47,10 +49,13 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
   });
 
   const [errors, setErrors] = useState<Partial<MedicineFormData>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingMedicine, setIsSavingMedicine] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [savedMedicineId, setSavedMedicineId] = useState<number | null>(null);
+  const [medicineSaved, setMedicineSaved] = useState(false);
 
   // Simplified categories and forms
   const categories = [
@@ -66,8 +71,21 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
     // Clear errors when modal opens or editingMedicine changes
     setSubmitError(null);
     setErrors({});
+    setMedicineSaved(false);
+    setSavedMedicineId(null);
+    setSelectedFile(null);
+    setImagePreview('');
     
     if (editingMedicine) {
+      // When editing, medicine is already saved
+      const medicineId = (editingMedicine as any).numericId || 
+                        (typeof editingMedicine.id === 'string' 
+                          ? Number(editingMedicine.id) 
+                          : editingMedicine.id);
+      if (medicineId && !isNaN(medicineId) && medicineId > 0) {
+        setSavedMedicineId(medicineId);
+        setMedicineSaved(true);
+      }
       console.log('💉 AddMedicineModal: Populating form with editingMedicine:', editingMedicine);
       console.log('💉 AddMedicineModal: Category:', editingMedicine.category);
       console.log('💉 AddMedicineModal: Form:', editingMedicine.form);
@@ -192,7 +210,7 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSaveMedicine = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Clear previous errors
@@ -203,22 +221,52 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
       return;
     }
 
-    setIsSubmitting(true);
+    setIsSavingMedicine(true);
     
     try {
-      console.log('💉 Submitting medicine form:', formData);
-      // Await the onSubmit call - it's async and handles the API call
-      await onSubmit(formData);
-      console.log('✅ Medicine form submitted successfully');
-      // Only close modal if submission was successful
-      handleClose();
+      console.log('💉 Saving medicine:', formData);
+      // Save medicine first (without image)
+      const medicineId = await onSubmit(formData);
+      
+      if (medicineId) {
+        setSavedMedicineId(medicineId);
+        setMedicineSaved(true);
+        console.log('✅ Medicine saved successfully with ID:', medicineId);
+      } else {
+        throw new Error('Failed to get medicine ID after save');
+      }
     } catch (error) {
-      console.error('❌ Error submitting medicine form:', error);
+      console.error('❌ Error saving medicine:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to save medicine. Please try again.';
       setSubmitError(errorMessage);
-      // Don't close modal on error - let user see the error and retry
     } finally {
-      setIsSubmitting(false);
+      setIsSavingMedicine(false);
+    }
+  };
+
+  const handleUploadImage = async () => {
+    if (!selectedFile || !savedMedicineId || !onImageUpload) {
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setSubmitError(null);
+
+    try {
+      console.log('💉 Uploading image for medicine ID:', savedMedicineId);
+      await onImageUpload(savedMedicineId, selectedFile);
+      console.log('✅ Image uploaded successfully');
+      
+      // Success - close modal after a brief delay
+      setTimeout(() => {
+        handleClose();
+      }, 1000);
+    } catch (error) {
+      console.error('❌ Error uploading image:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload image. Please try again.';
+      setSubmitError(errorMessage);
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -263,7 +311,7 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
           </button>
         </div>
 
-        <form className="medicine-modal-form" onSubmit={handleSubmit}>
+        <form className="medicine-modal-form" onSubmit={handleSaveMedicine}>
           <div className="medicine-form-content">
             <div className="medicine-form-section">
               <h3 className="section-title">
@@ -453,8 +501,26 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
 
               <div className="form-group">
                 <label className="form-label">
-                  Medicine Image
+                  Medicine Image {!medicineSaved && <span className="info-text">(Upload after saving medicine)</span>}
                 </label>
+                
+                {/* Success message when medicine is saved */}
+                {medicineSaved && savedMedicineId && (
+                  <div style={{ 
+                    padding: '12px', 
+                    marginBottom: '12px', 
+                    background: '#e8f5e9', 
+                    color: '#2e7d32', 
+                    borderRadius: '4px', 
+                    border: '1px solid #c8e6c9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span>✅</span>
+                    <span>Medicine saved! (ID: {savedMedicineId}) Now you can upload the image.</span>
+                  </div>
+                )}
                 
                 {/* Image Preview */}
                 {(imagePreview || formData.image) && (
@@ -464,50 +530,41 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
                       alt="Medicine preview" 
                       className="image-preview"
                     />
-                    <button 
-                      type="button" 
-                      className="remove-image-btn"
-                      onClick={handleRemoveFile}
-                    >
-                      ✕
-                    </button>
+                    {medicineSaved && (
+                      <button 
+                        type="button" 
+                        className="remove-image-btn"
+                        onClick={handleRemoveFile}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 )}
                 
-                {/* File Upload Area */}
+                {/* File Upload Area - Disabled until medicine is saved */}
                 <div className="file-upload-container">
-                  <div className="file-upload-area">
+                  <div className="file-upload-area" style={{ 
+                    opacity: medicineSaved ? 1 : 0.6,
+                    pointerEvents: medicineSaved ? 'auto' : 'none'
+                  }}>
                     <input
                       type="file"
                       id="file-upload"
                       accept="image/*"
                       onChange={handleFileChange}
                       className="file-input"
+                      disabled={!medicineSaved}
                     />
-                    <label htmlFor="file-upload" className="file-upload-label">
+                    <label htmlFor="file-upload" className="file-upload-label" style={{ 
+                      cursor: medicineSaved ? 'pointer' : 'not-allowed'
+                    }}>
                       <span className="upload-icon">📷</span>
                       <span className="upload-text">
-                        {selectedFile ? 'Change Image' : 'Choose Image File'}
+                        {selectedFile ? 'Change Image' : medicineSaved ? 'Choose Image File' : 'Save medicine first'}
                       </span>
                       <span className="upload-hint">JPG, PNG, GIF (max 5MB)</span>
                     </label>
-                  </div>
-                  
-                  <div className="upload-divider">
-                    <span>OR</span>
-                  </div>
-                  
-                  <div className="url-input-container">
-                    <input
-                      type="url"
-                      id="image"
-                      name="image"
-                      value={formData.image}
-                      onChange={handleInputChange}
-                      className="form-input"
-                      placeholder="Enter image URL"
-                      disabled={!!selectedFile}
-                    />
                   </div>
                 </div>
               </div>
@@ -535,21 +592,58 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
           )}
           
           {/* Footer buttons */}
-          <div style={{ padding: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #e0e0e0', marginTop: '20px' }}>
+          <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', borderTop: '1px solid #e0e0e0', marginTop: '20px' }}>
             <button type="button" onClick={handleClose} style={{ padding: '10px 20px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: '4px', cursor: 'pointer' }}>
-              Cancel
+              {medicineSaved ? 'Close' : 'Cancel'}
             </button>
-            <button type="submit" disabled={isSubmitting} style={{ padding: '10px 20px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
-              {isSubmitting ? (
-                <>
-                  <span>{editingMedicine ? 'Updating...' : 'Creating...'}</span>
-                </>
-              ) : (
-                <>
-                  {editingMedicine ? 'Update Medicine' : 'Add Medicine'}
-                </>
+            
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {/* Save Medicine Button - Always visible, disabled after save */}
+              <button 
+                type="submit" 
+                disabled={isSavingMedicine || medicineSaved} 
+                style={{ 
+                  padding: '10px 20px', 
+                  background: medicineSaved ? '#81c784' : '#4caf50', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: (isSavingMedicine || medicineSaved) ? 'not-allowed' : 'pointer',
+                  opacity: medicineSaved ? 0.7 : 1
+                }}
+              >
+                {isSavingMedicine ? (
+                  <span>💾 Saving...</span>
+                ) : medicineSaved ? (
+                  <span>✅ Saved</span>
+                ) : (
+                  <span>{editingMedicine ? '💾 Update Medicine' : '💾 Save Medicine'}</span>
+                )}
+              </button>
+
+              {/* Upload Image Button - Only visible after medicine is saved */}
+              {medicineSaved && onImageUpload && (
+                <button 
+                  type="button"
+                  onClick={handleUploadImage}
+                  disabled={!selectedFile || isUploadingImage}
+                  style={{ 
+                    padding: '10px 20px', 
+                    background: (!selectedFile || isUploadingImage) ? '#ccc' : '#2196f3', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '4px', 
+                    cursor: (!selectedFile || isUploadingImage) ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isUploadingImage ? (
+                    <span>📤 Uploading...</span>
+                  ) : (
+                    <span>📤 {selectedFile ? 'Upload Image' : 'Select Image First'}</span>
+                  )}
+                </button>
               )}
-            </button>
+            </div>
           </div>
         </form>
       </div>

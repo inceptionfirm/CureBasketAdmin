@@ -11,6 +11,8 @@ import Header from './Components/Header/Header';
 import Dashboard from './Components/Dashboard/Dashboard';
 import Profile from './Components/Profile/Profile';
 import Settings from './Components/Settings/Settings';
+import BankContact from './Components/BankContact/BankContact';
+import Dispense from './Components/Dispense/Dispense';
 import Users from './Components/Users/Users';
 import Categories from './Components/Categories/Categories';
 import Blogs from './Components/Blogs/Blogs';
@@ -111,6 +113,8 @@ function AdminLayout(): React.JSX.Element {
           <Route path="/roles" element={<Roles />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/bank-contact" element={<BankContact />} />
+          <Route path="/dispense" element={<Dispense />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </div>

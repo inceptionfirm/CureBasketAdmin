@@ -1,0 +1,177 @@
+.medication-editor {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid #e5e7eb;
+}
+
+.medication-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.medication-editor-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.btn-add-medication {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-add-medication:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.medication-empty {
+  text-align: center;
+  padding: 2rem;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.medications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.medication-item {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.25rem;
+  transition: all 0.2s ease;
+}
+
+.medication-item:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.medication-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.medication-number {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn-remove-medication {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+  padding: 0;
+}
+
+.btn-remove-medication:hover {
+  background: #dc2626;
+  color: white;
+  transform: scale(1.1);
+}
+
+.medication-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 1rem;
+}
+
+.medication-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.medication-field-full {
+  grid-column: 1 / -1;
+}
+
+.medication-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.required {
+  color: #ef4444;
+}
+
+.medication-input {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: #1f2937;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.medication-input:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.medication-value {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  color: #1f2937;
+  font-weight: 500;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .medication-fields {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .medication-field-full {
+    grid-column: 1;
+  }
+}

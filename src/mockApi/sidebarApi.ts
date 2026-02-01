@@ -69,11 +69,27 @@ const MOCK_SIDEBAR_DATA: MockSidebarResponse = {
       permissions: ['medicine:read']
     } as SidebarMenuItem,
     {
+      id: 'bank-contact',
+      title: 'Bank & Contact',
+      icon: '🏦',
+      path: '/bank-contact',
+      order: 8,
+      permissions: ['bank-contact:read']
+    } as SidebarMenuItem,
+    {
+      id: 'dispense',
+      title: 'Dispense',
+      icon: '📦',
+      path: '/dispense',
+      order: 9,
+      permissions: ['dispense:read']
+    } as SidebarMenuItem,
+    {
       id: 'profile',
       title: 'Profile',
       icon: '👤',
       path: '/profile',
-      order: 8,
+      order: 10,
       permissions: ['profile:read']
     } as SidebarMenuItem,
     {
@@ -81,7 +97,7 @@ const MOCK_SIDEBAR_DATA: MockSidebarResponse = {
       title: 'Settings',
       icon: '⚙️',
       path: '/settings',
-      order: 9,
+      order: 11,
       permissions: ['settings:read']
     } as SidebarMenuItem
   ],
@@ -93,6 +109,8 @@ const MOCK_SIDEBAR_DATA: MockSidebarResponse = {
     'banners:read',
     'prescriptions:read',
     'medicine:read',
+    'bank-contact:read',
+    'dispense:read',
     'profile:read',
     'settings:read'
   ],

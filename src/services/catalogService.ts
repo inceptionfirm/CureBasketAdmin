@@ -233,20 +233,20 @@ class CatalogService {
     documentTypes: ('IMAGE' | 'THUMBNAIL' | 'DOCUMENT')[],
     forCategory: boolean = false
   ): Promise<{ success: boolean; message?: string }> {
-    console.log('📦 Uploading files:', `${this.baseEndpoint}/uplaod/file/${itemId}`);
-    
+    console.log('📦 Uploading files:', `${this.baseEndpoint}/upload/file/${itemId}`);
+
     const formData = new FormData();
     files.forEach(file => {
       formData.append('file', file);
     });
     formData.append('itemType', itemType);
-    documentTypes.forEach(type => {
-      formData.append('documentType', type);
-    });
+    // Join documentTypes as CSV with space after comma (matching curl format)
+    const documentTypeCSV = documentTypes.join(', ');
+    formData.append('documentType', documentTypeCSV);
     formData.append('forCategory', forCategory.toString());
 
     // Note: apiClient.post should handle FormData automatically
-    const response = await apiClient.post(`${this.baseEndpoint}/uplaod/file/${itemId}`, formData);
+    const response = await apiClient.post(`${this.baseEndpoint}/upload/file/${itemId}`, formData);
     console.log('📦 Upload files response:', response);
 
     if (!response.success) {
@@ -397,7 +397,7 @@ class CatalogService {
   // 33. Get All Categories
   async getAllCategories(params: CategoryListParams = {}): Promise<CategoryListResponse> {
     const queryParams: Record<string, any> = {};
-    
+
     if (params.itemType) queryParams.itemType = params.itemType;
     if (params.status) queryParams.status = params.status;
     if (params.page !== undefined) queryParams.page = params.page;

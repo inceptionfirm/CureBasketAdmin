@@ -92,10 +92,10 @@ const SuperAdminModal: React.FC<SuperAdminModalProps> = ({ isOpen, onClose, onSu
       return;
     }
 
-    setFormState(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+        setFormState(prev => ({
+          ...prev,
+          [name]: value,
+        }));
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

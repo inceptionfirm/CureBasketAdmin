@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { medicineService, Medicine, MedicineListParams } from '../../services/modules/medicineService';
+import { fileUploadService } from '../../services/fileUploadService';
+import { clientConfigManager } from '../../config/clientConfig';
 import AddMedicineModal from './AddMedicineModal';
+import AuthenticatedImage from './AuthenticatedImage';
 import './MedicinePage.css';
 
 const MedicinePage: React.FC = () => {
@@ -11,8 +14,10 @@ const MedicinePage: React.FC = () => {
     current: 1,
     pageSize: 10,
     total: 0,
+    totalPages: 1
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [selectedMedicines, setSelectedMedicines] = useState<Medicine[]>([]);
   const [isAddMedicineModalOpen, setIsAddMedicineModalOpen] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
@@ -69,15 +74,87 @@ const MedicinePage: React.FC = () => {
            '',
       status: apiMedicine.status?.toUpperCase() === 'INACTIVE' ? 'inactive' : 'active',
       image: (() => {
-        const img = apiMedicine.image || 
-                   apiMedicine.imageUrl || 
-                   apiMedicine.thumbnail ||
-                   (apiMedicine.files && Array.isArray(apiMedicine.files) && apiMedicine.files[0]?.url) ||
-                   (apiMedicine.files && Array.isArray(apiMedicine.files) && apiMedicine.files[0]?.fileUrl) ||
-                   '';
-        if (img) {
-          console.log('💉 Mapped image for', apiMedicine.name, ':', img);
+        // Extract image from multiple possible sources
+        let img = '';
+
+        // First check direct image fields
+        if (apiMedicine.image) {
+          img = apiMedicine.image;
+        } else if (apiMedicine.imageUrl) {
+          img = apiMedicine.imageUrl;
+        } else if (apiMedicine.thumbnail) {
+          img = apiMedicine.thumbnail;
+        } else if (apiMedicine.fileUrl) {
+          img = apiMedicine.fileUrl;
+        } else if (typeof apiMedicine.files === 'string') {
+          // If files is a string (comma-separated URLs)
+          img = apiMedicine.files.split(',')[0].trim();
+        } else if (apiMedicine.files && Array.isArray(apiMedicine.files) && apiMedicine.files.length > 0) {
+          // API returns files array with docPath field
+          // Use the first file's docPath (API structure: files[0].docPath)
+          const firstFile = apiMedicine.files[0];
+          if (firstFile) {
+            if (typeof firstFile === 'string') {
+              // If file is a string, use it directly
+              img = firstFile;
+            } else if (firstFile.docPath) {
+              // API returns docPath field (e.g., "/files/MEDICINE/image.png")
+              img = firstFile.docPath;
+            } else {
+              // Fallback to other possible field names
+              img = firstFile.fileUrl ||
+                firstFile.url ||
+                firstFile.file_path ||
+                firstFile.path ||
+                firstFile.documentUrl || '';
+            }
+          }
         }
+
+        // Normalize image URL (add base URL if relative)
+        // Images are served from https://java.api.curebasket.com (without /backend)
+        // Example: "/files/MEDICINE/image.png" -> "https://java.api.curebasket.com/files/MEDICINE/image.png"
+        const normalizeImageUrl = (imgUrl: string): string => {
+          if (!imgUrl || imgUrl.trim() === '') return '';
+
+          // If already a full URL, return as is
+          if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://') || imgUrl.startsWith('data:')) {
+            return imgUrl;
+          }
+
+          // Base URL for images (without /backend)
+          const imageBaseURL = 'https://java.api.curebasket.com';
+
+          // If path starts with /, append directly, otherwise add /
+          if (imgUrl.startsWith('/')) {
+            return `${imageBaseURL}${imgUrl}`;
+          } else {
+            return `${imageBaseURL}/${imgUrl}`;
+          }
+        };
+
+        img = normalizeImageUrl(img);
+
+        if (img) {
+          console.log('💉 Mapped medicine image:', {
+            medicineId: medicineId,
+            name: apiMedicine.name,
+            imageUrl: img,
+            rawApiData: {
+              image: apiMedicine.image,
+              imageUrl: apiMedicine.imageUrl,
+              files: apiMedicine.files,
+              allKeys: Object.keys(apiMedicine)
+            }
+          });
+        } else {
+          console.warn('⚠️ No image found for medicine:', {
+            medicineId: medicineId,
+            name: apiMedicine.name,
+            allKeys: Object.keys(apiMedicine)
+          });
+        }
+
         return img;
       })(),
       genericName: apiMedicine.genericName || '',
@@ -86,10 +163,10 @@ const MedicinePage: React.FC = () => {
       createdAt: apiMedicine.createdAt || '',
       updatedAt: apiMedicine.updatedAt || '',
       prescriptionRequired: apiMedicine.prescriptionRequired || false,
-      countryOfOrigin: apiMedicine.countryOfOrigin || 
-                      apiMedicine.country_of_origin ||
-                      (apiMedicine.mainAttributes?.find((attr: any) => attr.name?.toLowerCase() === 'countryoforigin' || attr.name?.toLowerCase() === 'country_of_origin')?.value) ||
-                      ''
+      countryOfOrigin: apiMedicine.countryOfOrigin ||
+        apiMedicine.country_of_origin ||
+        (apiMedicine.mainAttributes?.find((attr: any) => attr.name?.toLowerCase() === 'countryoforigin' || attr.name?.toLowerCase() === 'country_of_origin')?.value) ||
+        ''
     };
   };
 
@@ -98,9 +175,10 @@ const MedicinePage: React.FC = () => {
       setLoading(true);
       setError(null);
       
+      // Fetch all medicines for client-side pagination
       const response = await medicineService.getAllMedicines({
-        page: (pagination.current - 1),
-        size: pagination.pageSize,
+        page: 0,
+        size: 1000, // Fetch all for client-side pagination
         ...(sortBy && sortBy.trim() !== '' ? { sortBy: sortBy } : {}),
         ...params,
       });
@@ -126,9 +204,11 @@ const MedicinePage: React.FC = () => {
       }
       
       setMedicines(mappedMedicines);
+      const total = response.pagination?.total || mappedMedicines.length;
       setPagination(prev => ({
         ...prev,
-        total: response.pagination?.total || mappedMedicines.length,
+        total: total,
+        totalPages: Math.ceil(total / prev.pageSize)
       }));
 
       // Calculate analytics
@@ -148,7 +228,7 @@ const MedicinePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.current, pagination.pageSize, sortBy]);
+  }, [sortBy]); // Remove pagination from dependencies - we'll do client-side pagination
 
   useEffect(() => {
     loadMedicines();
@@ -158,6 +238,25 @@ const MedicinePage: React.FC = () => {
     setSearchTerm(value);
     setPagination(prev => ({ ...prev, current: 1 }));
   };
+
+  const handleStatusFilterChange = (status: 'all' | 'active' | 'inactive') => {
+    setStatusFilter(status);
+    setPagination(prev => ({ ...prev, current: 1 }));
+  };
+
+  // Filter medicines based on search term and status
+  const filteredMedicines = medicines.filter(medicine => {
+    // Search filter
+    const matchesSearch = searchTerm === '' || 
+      medicine.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      medicine.manufacturer?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      medicine.category?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Status filter
+    const matchesStatus = statusFilter === 'all' || medicine.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
 
 
   const handleRefresh = () => {
@@ -199,7 +298,7 @@ const MedicinePage: React.FC = () => {
     }
   };
 
-  const handleAddMedicine = async (medicineData: any) => {
+  const handleAddMedicine = async (medicineData: any): Promise<number | null> => {
     try {
       setError(null);
       console.log('💉 handleAddMedicine called with:', medicineData);
@@ -287,6 +386,9 @@ const MedicinePage: React.FC = () => {
         
         // Send only the fields to update in request body
           await medicineService.updateMedicine(medicineId, updatePayload);
+
+        // Return the medicine ID for image upload
+        return medicineId;
       } else {
         // Match exact curl payload structure
         const createPayload: any = {
@@ -319,22 +421,50 @@ const MedicinePage: React.FC = () => {
         console.log('💉 Calling createMedicine API...');
         const createResult = await medicineService.createMedicine(createPayload);
         console.log('✅ Medicine created successfully:', createResult);
+
+        // Return the new medicine ID for image upload
+        if (createResult.data?.id) {
+          const newMedicineId = Number(createResult.data.id);
+          if (!isNaN(newMedicineId) && newMedicineId > 0) {
+            return newMedicineId;
+          } else {
+            console.warn('⚠️ Could not determine new medicine ID:', createResult.data.id);
+            throw new Error('Failed to get medicine ID after creation');
+          }
+        } else {
+          throw new Error('Medicine created but no ID returned');
+        }
       }
-      
-      // Reload medicines list after successful create/update
-      console.log('💉 Reloading medicines list...');
-      await loadMedicines();
-      console.log('✅ Medicines list reloaded');
-      
-      // Close modal only after successful operation
-      setIsAddMedicineModalOpen(false);
-      setEditingMedicine(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save medicine';
       console.error('❌ Error in handleAddMedicine:', err);
       console.error('❌ Error message:', errorMessage);
       setError(errorMessage);
-      // Don't close modal on error - let user see the error and retry
+      throw err; // Re-throw so AddMedicineModal can catch it
+    }
+  };
+
+  const handleImageUpload = async (medicineId: number, file: File): Promise<void> => {
+    try {
+      setError(null);
+      console.log('💉 Uploading image for medicine ID:', medicineId);
+
+      const uploadResponse = await fileUploadService.uploadMedicineImage(medicineId, file);
+      console.log('✅ Image uploaded successfully');
+      console.log('📦 Upload response data:', uploadResponse.data);
+
+      // Reload medicines list after successful image upload to get updated image URL
+      console.log('💉 Reloading medicines list...');
+      await loadMedicines();
+      console.log('✅ Medicines list reloaded');
+      
+      // Close modal after successful upload
+      setIsAddMedicineModalOpen(false);
+      setEditingMedicine(null);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to upload image';
+      console.error('❌ Error uploading image:', err);
+      setError(errorMessage);
       throw err; // Re-throw so AddMedicineModal can catch it
     }
   };
@@ -433,8 +563,9 @@ const MedicinePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Simple Search */}
+      {/* Search and Filter Section */}
       <div className="search-section">
+        <div className="search-filter-container">
         <input
           type="text"
           placeholder="Search medicines..."
@@ -442,6 +573,20 @@ const MedicinePage: React.FC = () => {
           value={searchTerm}
           onChange={(e) => handleSearch(e.target.value)}
         />
+          <div className="status-filter">
+            <label htmlFor="status-filter" className="filter-label">Status:</label>
+            <select
+              id="status-filter"
+              className="filter-select"
+              value={statusFilter}
+              onChange={(e) => handleStatusFilterChange(e.target.value as 'all' | 'active' | 'inactive')}
+            >
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Bulk Actions */}
@@ -451,7 +596,10 @@ const MedicinePage: React.FC = () => {
       <div className="medicines-section">
         <div className="section-header">
           <h2 className="section-title">Medicine Inventory</h2>
-          <p className="section-subtitle">{medicines.length} medicines in your inventory</p>
+          <p className="section-subtitle">
+            {filteredMedicines.length} of {medicines.length} medicines
+            {statusFilter !== 'all' && ` (${statusFilter})`}
+          </p>
         </div>
         
         {loading ? (
@@ -468,7 +616,7 @@ const MedicinePage: React.FC = () => {
               Try Again
             </button>
           </div>
-        ) : medicines.length === 0 ? (
+        ) : filteredMedicines.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">💊</div>
             <h3>No medicines found</h3>
@@ -478,19 +626,67 @@ const MedicinePage: React.FC = () => {
             </button>
           </div>
         ) : (
+          <>
+            {/* Pagination - Above the list */}
+            {filteredMedicines.length > pagination.pageSize && (
+              <div className="pagination" style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '20px',
+                marginBottom: '20px'
+              }}>
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, current: prev.current - 1 }))}
+                  disabled={pagination.current === 1}
+                  style={{
+                    padding: '8px 16px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    background: pagination.current === 1 ? '#f5f5f5' : 'white',
+                    cursor: pagination.current === 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Previous
+                </button>
+                <span style={{ padding: '0 10px' }}>
+                  Page {pagination.current} of {Math.ceil(filteredMedicines.length / pagination.pageSize)} ({filteredMedicines.length} total)
+                </span>
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, current: prev.current + 1 }))}
+                  disabled={pagination.current >= Math.ceil(filteredMedicines.length / pagination.pageSize)}
+                  style={{
+                    padding: '8px 16px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    background: pagination.current >= Math.ceil(filteredMedicines.length / pagination.pageSize) ? '#f5f5f5' : 'white',
+                    cursor: pagination.current >= Math.ceil(filteredMedicines.length / pagination.pageSize) ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+
           <div className="medicines-list">
-            {medicines.map((medicine, index) => (
+              {/* Apply client-side pagination */}
+              {filteredMedicines
+                .slice(
+                  (pagination.current - 1) * pagination.pageSize,
+                  pagination.current * pagination.pageSize
+                )
+                .map((medicine, index) => (
               <div key={medicine.id || (medicine as any).numericId || `medicine-${index}-${medicine.name}`} className="medicine-item">
-                {/* Medicine Image */}
+                    {/* Medicine Image - Use AuthenticatedImage to fetch with Bearer token (avoids ERR_BLOCKED_BY_ORB) */}
                 {medicine.image && (
                   <div className="medicine-image-container">
-                    <img 
+                        <AuthenticatedImage
                       src={medicine.image} 
                       alt={medicine.name}
                       className="medicine-image"
-                      onError={(e) => {
+                          onError={() => {
                         console.error('❌ Image failed to load:', medicine.image);
-                        (e.target as HTMLImageElement).style.display = 'none';
                       }}
                     />
                   </div>
@@ -511,12 +707,12 @@ const MedicinePage: React.FC = () => {
                       {(medicine as any).stock || 0}
                     </span>
                   </div>
-                  {medicine.countryOfOrigin && (
-                    <div className="detail">
-                      <span className="detail-label">Country of Origin:</span>
-                      <span className="detail-value">{medicine.countryOfOrigin}</span>
-                    </div>
-                  )}
+                      {medicine.countryOfOrigin && (
+                        <div className="detail">
+                          <span className="detail-label">Country of Origin:</span>
+                          <span className="detail-value">{medicine.countryOfOrigin}</span>
+                        </div>
+                      )}
                   <div className="detail">
                     <span className="detail-label">Status:</span>
                     <span className={`status ${medicine.status}`}>{medicine.status}</span>
@@ -539,6 +735,7 @@ const MedicinePage: React.FC = () => {
               </div>
             ))}
           </div>
+          </>
         )}
       </div>
 
@@ -547,6 +744,7 @@ const MedicinePage: React.FC = () => {
         isOpen={isAddMedicineModalOpen}
         onClose={handleCloseModal}
         onSubmit={handleAddMedicine}
+        onImageUpload={handleImageUpload}
         editingMedicine={editingMedicine}
       />
     </div>

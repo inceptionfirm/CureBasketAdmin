@@ -1,5 +1,6 @@
 import { apiClient } from './apiClient';
 import { clientConfigManager } from '../config/clientConfig';
+import { fileUploadService } from './fileUploadService';
 
 export interface Category {
   id: string;
@@ -64,10 +65,10 @@ class CategoryService {
   // GET /catalog/categories?itemType=PRODUCT&search=&status=&page=&pageSize=&sortBy=&sortOrder=
   async getCategories(params: CategoryListParams = {}): Promise<CategoryListResponse> {
     const query: Record<string, any> = {};
-    
+
     // itemType is required (from curl)
     query.itemType = 'PRODUCT';
-    
+
     // Optional query parameters
     // Don't send empty strings - only send defined, non-empty values
     if (params.page !== undefined && params.page !== null && params.page !== '') {
@@ -91,14 +92,14 @@ class CategoryService {
         query.status = params.filters.status.toUpperCase();
       }
     }
-    
+
     // Remove any empty string values to match curl behavior
     Object.keys(query).forEach(key => {
       if (query[key] === '' || query[key] === null || query[key] === undefined) {
         delete query[key];
       }
     });
-    
+
     console.log('📦 CategoryService - Query params being sent:', query);
 
     const response = await apiClient.get<Record<string, any>>(
@@ -112,13 +113,13 @@ class CategoryService {
 
     // Response structure: { success: true, data: { pageInfo: {...}, content: [...] } }
     const payload = response.data ?? {} as any;
-    
+
     console.log('📦 CategoryService - Full response.data:', JSON.stringify(payload, null, 2));
     console.log('📦 CategoryService - payload keys:', Object.keys(payload));
     console.log('📦 CategoryService - payload.content:', payload.content);
     console.log('📦 CategoryService - payload.content is array?', Array.isArray(payload.content));
     console.log('📦 CategoryService - payload.pageInfo:', payload.pageInfo);
-    
+
     // Extract content array - response.data.content
     // Response structure: { success: true, data: { pageInfo: {...}, content: [...] } }
     // So response.data = { pageInfo: {...}, content: [...] }
@@ -142,12 +143,12 @@ class CategoryService {
       console.warn('⚠️ CategoryService - No content array found in payload');
       console.warn('⚠️ CategoryService - Payload structure:', JSON.stringify(payload, null, 2));
     }
-    
+
     // Extract pageInfo - response.data.pageInfo
     const pageInfo = payload.pageInfo || (payload.data ? payload.data.pageInfo : undefined);
     console.log('📦 CategoryService - pageInfo:', pageInfo);
     console.log('📦 CategoryService - totalRecords:', pageInfo?.totalRecords, 'content.length:', content.length);
-    
+
     // If content is empty but totalRecords > 0, log warning
     if (content.length === 0 && pageInfo?.totalRecords > 0) {
       console.warn('⚠️ CategoryService - Content array is empty but totalRecords > 0. This might be a pagination issue.');
@@ -170,6 +171,49 @@ class CategoryService {
       const name = item.categoryName ?? item.name ?? `Category ${index + 1}`;
       const slugSource = item.slug ?? name;
 
+      // Extract image from files array (similar to Banner/Blog)
+      let imageUrl = '';
+      console.log(`📦 Category ${index + 1} (${item.categoryName || item.name}):`, {
+        hasFiles: !!(item.files && Array.isArray(item.files)),
+        filesLength: item.files?.length || 0,
+        files: item.files,
+        directImage: item.image,
+        imageUrl: item.imageUrl
+      });
+      
+      if (item.files && Array.isArray(item.files) && item.files.length > 0) {
+        // Try to find the first file with docPath
+        const fileWithPath = item.files.find((f: any) => f?.docPath);
+        if (fileWithPath?.docPath) {
+          const docPath = fileWithPath.docPath;
+          console.log(`📦 Found docPath for category ${index + 1}:`, docPath);
+          
+          // Normalize image URL - add base URL if relative
+          if (docPath.startsWith('http://') || docPath.startsWith('https://')) {
+            imageUrl = docPath;
+          } else {
+            // Base URL for images (without /backend)
+            const imageBaseURL = 'https://java.api.curebasket.com';
+            imageUrl = docPath.startsWith('/')
+              ? `${imageBaseURL}${docPath}`
+              : `${imageBaseURL}/${docPath}`;
+          }
+          console.log(`📦 Normalized image URL for category ${index + 1}:`, imageUrl);
+        }
+      }
+      
+      // Fallback to direct image fields if files array is empty
+      if (!imageUrl || imageUrl.trim() === '') {
+        imageUrl = item.image ?? item.imageUrl ?? '';
+        if (imageUrl) {
+          console.log(`📦 Using direct image field for category ${index + 1}:`, imageUrl);
+        }
+      }
+      
+      if (!imageUrl || imageUrl.trim() === '') {
+        console.log(`⚠️ No image found for category ${index + 1} (${item.categoryName || item.name})`);
+      }
+
       return {
         id: String(item.id ?? item.categoryId ?? item.businessCategoryId ?? `${Date.now()}-${index}`),
         name,
@@ -179,7 +223,7 @@ class CategoryService {
           .trim()
           .toLowerCase()
           .replace(/\s+/g, '-'),
-        image: item.image ?? item.imageUrl ?? '',
+        image: imageUrl,
         icon: item.icon ?? undefined,
         status,
         sortOrder: Number(item.sortOrder ?? item.order ?? 0),
@@ -231,15 +275,16 @@ class CategoryService {
     description?: string;
     itemType?: string;
     status?: string;
-  }): Promise<{ message: string }> {
+  }): Promise<Category> {
     const payload = {
       categoryName: category.name,
       categoryDescription: category.description || '',
       itemType: category.itemType || 'PRODUCT',
       state: category.status || 'ACTIVE',
+      forCategory: true, // Add forCategory flag to the payload
     };
 
-    const response = await apiClient.post<{ message?: string }>(
+    const response = await apiClient.post<Category | { id?: number; categoryId?: number; message?: string }>(
       '/catalog/add-category',
       payload
     );
@@ -249,19 +294,36 @@ class CategoryService {
     }
 
     const responseData = response.data || {};
+
+    // Extract ID from response
+    const categoryId = (responseData as any).id || (responseData as any).categoryId || (responseData as any).businessCategoryId;
+
+    if (!categoryId) {
+      // If no ID in response, reload categories to get the latest one
+      // This is a fallback - ideally the API should return the created category
+      console.warn('⚠️ Category ID not found in response, will need to reload categories');
+      throw new Error('Category created but ID not returned. Please refresh the page.');
+    }
+
+    // Return category object with ID
     return {
-      message:
-        response.message ||
-        (typeof responseData === 'object' && responseData && 'message' in responseData
-          ? (responseData as Record<string, any>).message
-          : 'Category created successfully'),
+      id: String(categoryId),
+      name: category.name,
+      description: category.description || '',
+      slug: category.name.toLowerCase().replace(/\s+/g, '-'),
+      status: (category.status || 'ACTIVE').toLowerCase() as 'active' | 'inactive' | 'draft',
+      sortOrder: 0,
+      isFeatured: false,
+      productCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   }
 
   // Update Category
   // POST /catalog/update-category/{id}
   // Request body: Only the fields to update (single or multiple)
-  async updateCategory(id: string, updates: Partial<Category> & { itemType?: string; status?: string }): Promise<{ message: string }> {
+  async updateCategory(id: string, updates: Partial<Category> & { itemType?: string; status?: string }): Promise<Category> {
     // Ensure ID is valid
     const categoryId = Number(id);
     if (isNaN(categoryId) || categoryId <= 0) {
@@ -270,22 +332,22 @@ class CategoryService {
 
     // Build update payload - only include fields that are being updated
     const payload: Record<string, any> = {};
-    
+
     // Category name
     if (updates.name !== undefined && updates.name !== null && updates.name !== '') {
       payload.categoryName = updates.name;
     }
-    
+
     // Category description - can be empty string
     if ('description' in updates) {
       payload.categoryDescription = updates.description || '';
     }
-    
+
     // Item type - only if provided
     if (updates.itemType !== undefined && updates.itemType !== null) {
       payload.itemType = updates.itemType;
     }
-    
+
     // State/Status - map to ACTIVE/INACTIVE
     if (updates.status !== undefined && updates.status !== null) {
       const statusUpper = updates.status.toUpperCase();
@@ -300,6 +362,9 @@ class CategoryService {
       throw new Error('No fields to update');
     }
 
+    // Add forCategory flag to the payload
+    payload.forCategory = true;
+
     const response = await apiClient.post<{ message?: string }>(
       `/catalog/update-category/${categoryId}`,
       payload
@@ -310,13 +375,11 @@ class CategoryService {
     }
 
     const responseData = response.data || {};
-    return {
-      message:
-        response.message ||
-        (typeof responseData === 'object' && responseData && 'message' in responseData
-          ? (responseData as Record<string, any>).message
-          : 'Category updated successfully'),
-    };
+
+    // Get the updated category by fetching it
+    const updatedCategory = await this.getCategory(id);
+
+    return updatedCategory;
   }
 
   // Delete Category
@@ -520,6 +583,94 @@ class CategoryService {
     }
 
     return response.data!;
+  }
+
+  // Upload Category Files
+  /**
+   * Upload image files for a category
+   * Uses the common catalog upload endpoint: /catalog/upload/file/{categoryId}
+   * 
+   * @param categoryId - Category ID
+   * @param files - Array of image files to upload
+   * @param docTypes - Optional document types (e.g., ['thumbnail', 'icon', 'CoverPagePic'])
+   * @returns Promise with upload response
+   * 
+   * @example
+   * await categoryService.uploadFiles(12, [file1, file2], ['thumbnail', 'icon']);
+   */
+  async uploadFiles(
+    categoryId: number,
+    files: File[],
+    docTypes?: string[]
+  ): Promise<{ success: boolean; message?: string; data?: any }> {
+    try {
+      console.log('📦 Uploading category files:', {
+        categoryId,
+        fileCount: files.length,
+        docTypes
+      });
+
+      // The backend endpoint /catalog/upload/file/{itemId} checks for a catalog item first
+      // Categories are NOT catalog items, so it returns "Catalog Item not found"
+      // 
+      // Try using fileUploadService which uses 'isCategory' flag instead of 'forCategory'
+      // This might be the correct parameter name the backend expects
+
+      // Use fileUploadService.uploadFiles with isCategory: true
+      // Note: Backend doesn't accept 'CATEGORY' as itemType, so we use 'BANNER' as a workaround
+      // The isCategory flag tells the backend this is for a category, not a banner
+      const { fileUploadService } = await import('./fileUploadService');
+
+      const uploadResponse = await fileUploadService.uploadFiles({
+        itemId: categoryId,
+        itemType: 'BANNER', // Workaround: Backend doesn't accept 'CATEGORY', so use 'BANNER' with isCategory flag
+        files,
+        docTypes: docTypes || ['IMAGE'],
+        isCategory: true // Use isCategory flag - this tells backend it's for a category, not a banner
+      });
+
+      console.log('📦 Upload response:', uploadResponse);
+
+      if (!uploadResponse.success) {
+        console.error('❌ Category file upload failed:', uploadResponse.message);
+        throw new Error(uploadResponse.message || 'Failed to upload category files');
+      }
+
+      return {
+        success: true,
+        message: uploadResponse.message || 'Category files uploaded successfully',
+        data: uploadResponse.data || {},
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload category files';
+      console.error('❌ Error uploading category files:', error);
+      throw new Error(errorMessage);
+    }
+  }
+
+  // Delete Category File
+  /**
+   * Delete a file associated with a category
+   * Uses the common catalog delete endpoint: /catalog/delete/file?fileId={fileId}
+   * 
+   * @param fileId - File ID to delete
+   * @returns Promise with delete response
+   * 
+   * @example
+   * await categoryService.deleteFile(123);
+   */
+  async deleteFile(fileId: number): Promise<{ success: boolean; message?: string }> {
+    try {
+      const response = await fileUploadService.deleteFile(fileId);
+      return {
+        success: response.success,
+        message: response.message,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete category file';
+      console.error('❌ Error deleting category file:', error);
+      throw new Error(errorMessage);
+    }
   }
 }
 

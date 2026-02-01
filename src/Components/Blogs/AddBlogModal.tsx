@@ -31,51 +31,48 @@ interface EditingBlog {
 interface AddBlogModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: BlogFormData) => void;
+  onSubmit: (data: BlogFormData) => Promise<number | null>; // Returns blog ID
+  onImageUpload?: (blogId: number, file: File) => Promise<void>; // Separate image upload
   editingBlog?: EditingBlog | null;
 }
 
 interface BlogFormData {
   title: string;
-  slug: string;
+  category: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   content: string;
   excerpt: string;
-  featuredImage: string;
-  categoryId: string;
-  tags: string[];
-  status: 'draft' | 'published' | 'archived';
   seoTitle: string;
   seoDescription: string;
-  seoKeywords: string[];
 }
 
 const AddBlogModal: React.FC<AddBlogModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  onImageUpload,
   editingBlog
 }) => {
   const { t } = useLocale();
   
   const [formData, setFormData] = useState<BlogFormData>({
     title: '',
-    slug: '',
+    category: '',
+    status: 'DRAFT',
     content: '',
     excerpt: '',
-    featuredImage: '',
-    categoryId: '',
-    tags: [],
-    status: 'draft',
     seoTitle: '',
-    seoDescription: '',
-    seoKeywords: []
+    seoDescription: ''
   });
 
   const [errors, setErrors] = useState<Partial<BlogFormData>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingBlog, setIsSavingBlog] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [blogSaved, setBlogSaved] = useState(false);
+  const [savedBlogId, setSavedBlogId] = useState<number | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
-  const [tagInput, setTagInput] = useState('');
 
   useEffect(() => {
     if (editingBlog) {
@@ -96,22 +93,33 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
         excerpt,
         itemDescription: (editingBlog as any).itemDescription
       });
+
+      // Map status to uppercase
+      let status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' = 'DRAFT';
+      if (editingBlog.status) {
+        const statusUpper = String(editingBlog.status).toUpperCase();
+        if (statusUpper === 'PUBLISHED') {
+          status = 'PUBLISHED';
+        } else if (statusUpper === 'ARCHIVED') {
+          status = 'ARCHIVED';
+        } else {
+          status = 'DRAFT';
+        }
+      }
       
       setFormData({
         title: editingBlog.title || (editingBlog as any).itemName || '',
-        slug: editingBlog.slug || (editingBlog as any).itemHeading || '',
+        category: editingBlog.category?.name || String((editingBlog as any).category || ''),
+        status: status,
         content: content,
         excerpt: excerpt,
-        featuredImage: editingBlog.featuredImage || '',
-        categoryId: editingBlog.category?.id || String((editingBlog as any).categoryId || ''),
-        tags: editingBlog.tags || [],
-        status: editingBlog.status || 'draft',
         seoTitle: editingBlog.seoTitle || '',
-        seoDescription: editingBlog.seoDescription || '',
-        seoKeywords: editingBlog.seoKeywords || []
+        seoDescription: editingBlog.seoDescription || ''
       });
       if (editingBlog.featuredImage) {
         setImagePreview(editingBlog.featuredImage);
+      } else {
+        setImagePreview('');
       }
     } else {
       resetForm();
@@ -121,29 +129,23 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
   const resetForm = () => {
     setFormData({
       title: '',
-      slug: '',
+      category: '',
+      status: 'DRAFT',
       content: '',
       excerpt: '',
-      featuredImage: '',
-      categoryId: '',
-      tags: [],
-      status: 'draft',
       seoTitle: '',
-      seoDescription: '',
-      seoKeywords: []
+      seoDescription: ''
     });
     setErrors({});
     setSelectedFile(null);
     setImagePreview('');
-    setTagInput('');
+    setBlogSaved(false);
+    setSavedBlogId(null);
+    setSubmitError(null);
+    setIsSavingBlog(false);
+    setIsUploadingImage(false);
   };
 
-  const generateSlug = (title: string) => {
-    return title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -151,11 +153,8 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
     setFormData(prev => {
       const newData = { ...prev, [name]: value };
       
-      if (name === 'title' && !editingBlog) {
-        newData.slug = generateSlug(value);
-        if (!newData.seoTitle) {
+      if (name === 'title' && !editingBlog && !newData.seoTitle) {
           newData.seoTitle = value;
-        }
       }
       
       return newData;
@@ -170,12 +169,12 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        setErrors(prev => ({ ...prev, featuredImage: 'Image size should be less than 5MB' }));
+        setSubmitError('Image size should be less than 5MB');
         return;
       }
 
       if (!file.type.startsWith('image/')) {
-        setErrors(prev => ({ ...prev, featuredImage: 'Please select a valid image file' }));
+        setSubmitError('Please select a valid image file');
         return;
       }
 
@@ -184,20 +183,14 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
       reader.onload = (e) => {
         const result = e.target?.result as string;
         setImagePreview(result);
-        setFormData(prev => ({ ...prev, featuredImage: result }));
       };
       reader.readAsDataURL(file);
-      
-      if (errors.featuredImage) {
-        setErrors(prev => ({ ...prev, featuredImage: undefined }));
-      }
     }
   };
 
   const handleRemoveFile = () => {
     setSelectedFile(null);
     setImagePreview('');
-    setFormData(prev => ({ ...prev, featuredImage: '' }));
     
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) {
@@ -205,32 +198,6 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
     }
   };
 
-  const handleTagAdd = () => {
-    if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        tags: [...prev.tags, tagInput.trim()]
-      }));
-      setTagInput('');
-    }
-  };
-
-  const handleTagRemove = (tagToRemove: string) => {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.filter(tag => tag !== tagToRemove)
-    }));
-  };
-
-  const handleKeywordAdd = () => {
-    if (tagInput.trim() && !formData.seoKeywords.includes(tagInput.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        seoKeywords: [...prev.seoKeywords, tagInput.trim()]
-      }));
-      setTagInput('');
-    }
-  };
 
   const validateForm = (): boolean => {
     const newErrors: Partial<BlogFormData> = {};
@@ -239,55 +206,13 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
       newErrors.title = 'Title is required';
     }
 
-    if (!formData.slug.trim()) {
-      newErrors.slug = 'Slug is required';
-    }
-
-    // Content validation - be lenient when editing
     if (!formData.content.trim()) {
-      if (editingBlog) {
-        // When editing, check if content exists in editingBlog (might be in itemDescription)
-        const hasContent = editingBlog.content || 
-                          (editingBlog as any).itemDescription || 
-                          editingBlog.excerpt;
-        if (hasContent) {
-          // Content exists in editingBlog, so validation passes
-          // The content will be preserved from editingBlog in the update payload
-          console.log('📝 Content validation: Content exists in editingBlog, allowing update');
-        } else {
-          // No content found anywhere - but for updates, we'll allow it and use empty string
-          // The backend might accept empty content for updates
-          console.log('⚠️ Content validation: No content found, but allowing update (editing mode)');
-        }
-      } else {
-        // Creating new blog - content is required
         newErrors.content = 'Content is required';
-      }
     }
     
-    // Excerpt validation - be lenient when editing
     if (!formData.excerpt.trim()) {
-      if (editingBlog) {
-        // When editing, check if excerpt exists in editingBlog
-        const hasExcerpt = editingBlog.excerpt || 
-                          (editingBlog as any).itemDescription || 
-                          editingBlog.content;
-        if (hasExcerpt) {
-          console.log('📝 Excerpt validation: Excerpt exists in editingBlog, allowing update');
-        } else {
-          // No excerpt found - but for updates, we'll allow it
-          console.log('⚠️ Excerpt validation: No excerpt found, but allowing update (editing mode)');
-        }
-      } else {
-        // Creating new blog - excerpt is required
         newErrors.excerpt = 'Excerpt is required';
-      }
     }
-
-    // Category is optional based on API - make it optional in validation
-    // if (!formData.categoryId.trim()) {
-    //   newErrors.categoryId = 'Category is required';
-    // }
 
     setErrors(newErrors);
     const isValid = Object.keys(newErrors).length === 0;
@@ -295,16 +220,16 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
     return isValid;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveDetails = async () => {
+    // Clear previous errors
+    setSubmitError(null);
+
     console.log('📝 Form submit triggered');
     console.log('📝 Form data:', formData);
     console.log('📝 Editing blog?', editingBlog ? 'Yes' : 'No');
-    console.log('📝 Editing blog data:', editingBlog);
     
     const isValid = validateForm();
     console.log('📝 Form validation result:', isValid);
-    console.log('📝 Form errors:', errors);
     
     // For updates, allow submission even if validation fails
     // The parent component will handle missing content by using editingBlog data
@@ -315,25 +240,64 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
       console.log('⚠️ Validation failed but allowing submission (editing mode - will use editingBlog data)');
     }
 
-    console.log('✅ Form validation passed, calling onSubmit...');
-    setIsSubmitting(true);
+    setIsSavingBlog(true);
 
     try {
-      console.log('📝 Calling onSubmit with formData:', formData);
-      await onSubmit(formData);
-      console.log('✅ onSubmit completed successfully');
+      console.log('📝 Saving blog details:', formData);
+      // Save blog details first (all details including seoTitle, seoDescription)
+      const blogId = await onSubmit(formData);
+
+      if (blogId) {
+        setSavedBlogId(blogId);
+        setBlogSaved(true);
+        console.log('✅ Blog details saved successfully with ID:', blogId);
+      } else {
+        throw new Error('Failed to get blog ID after save');
+      }
+    } catch (error) {
+      console.error('❌ Error saving blog details:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save blog details. Please try again.';
+      setSubmitError(errorMessage);
+    } finally {
+      setIsSavingBlog(false);
+    }
+  };
+
+  const handleSaveAll = async () => {
+    if (!savedBlogId) {
+      setSubmitError('Please save details first');
+      return;
+    }
+
+    setSubmitError(null);
+
+    // If no image selected, just close modal
+    if (!selectedFile || !onImageUpload) {
+      handleClose();
+      return;
+    }
+
+    setIsUploadingImage(true);
+
+    try {
+      // Upload image if file is selected
+      console.log('📝 Uploading image for blog ID:', savedBlogId);
+      await onImageUpload(savedBlogId, selectedFile);
+      console.log('✅ Image uploaded successfully');
+
+      // Close modal after successful upload
       handleClose();
     } catch (error) {
-      console.error('❌ Error submitting blog:', error);
-      // Re-throw error so parent component can handle it
-      throw error;
+      console.error('❌ Error uploading image:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload image. Please try again.';
+      setSubmitError(errorMessage);
     } finally {
-      setIsSubmitting(false);
+      setIsUploadingImage(false);
     }
   };
 
   const handleClose = () => {
-    if (imagePreview && !formData.featuredImage.startsWith('http')) {
+    if (imagePreview && imagePreview.startsWith('blob:')) {
       URL.revokeObjectURL(imagePreview);
     }
     resetForm();
@@ -359,7 +323,7 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
           </button>
         </div>
 
-        <form className="blog-modal-form" onSubmit={handleSubmit}>
+        <form className="blog-modal-form" onSubmit={(e) => e.preventDefault()}>
           <div className="blog-form-content">
             <div className="blog-form-section">
               <h3 className="section-title">
@@ -383,42 +347,20 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
                 {errors.title && <span className="error-message">{errors.title}</span>}
               </div>
 
-              <div className="form-group">
-                <label htmlFor="slug" className="form-label">
-                  URL Slug *
-                </label>
-                <input
-                  type="text"
-                  id="slug"
-                  name="slug"
-                  value={formData.slug}
-                  onChange={handleInputChange}
-                  className={`form-input ${errors.slug ? 'error' : ''}`}
-                  placeholder="blog-url-slug"
-                />
-                {errors.slug && <span className="error-message">{errors.slug}</span>}
-              </div>
-
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="categoryId" className="form-label">
-                    Category *
+                  <label htmlFor="category" className="form-label">
+                    Category
                   </label>
-                  <select
-                    id="categoryId"
-                    name="categoryId"
-                    value={formData.categoryId}
+                  <input
+                    type="text"
+                    id="category"
+                    name="category"
+                    value={formData.category}
                     onChange={handleInputChange}
-                    className={`form-select ${errors.categoryId ? 'error' : ''}`}
-                  >
-                    <option value="">Select Category</option>
-                    <option value="health">Health</option>
-                    <option value="wellness">Wellness</option>
-                    <option value="medicine">Medicine</option>
-                    <option value="news">News</option>
-                    <option value="tips">Tips</option>
-                  </select>
-                  {errors.categoryId && <span className="error-message">{errors.categoryId}</span>}
+                    className="form-input"
+                    placeholder="e.g., Test_Category"
+                  />
                 </div>
 
                 <div className="form-group">
@@ -432,9 +374,9 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
                     onChange={handleInputChange}
                     className="form-select"
                   >
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                    <option value="archived">Archived</option>
+                    <option value="DRAFT">Draft</option>
+                    <option value="PUBLISHED">Published</option>
+                    <option value="ARCHIVED">Archived</option>
                   </select>
                 </div>
               </div>
@@ -474,106 +416,9 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
 
             <div className="blog-form-section">
               <h3 className="section-title">
-                <span className="section-icon">🖼️</span>
-                Featured Image
+                <span className="section-icon">🔍</span>
+                SEO Settings
               </h3>
-
-              {(imagePreview || formData.featuredImage) && (
-                <div className="image-preview-container">
-                  <img 
-                    src={imagePreview || formData.featuredImage} 
-                    alt="Featured image preview" 
-                    className="image-preview"
-                  />
-                  <button 
-                    type="button" 
-                    className="remove-image-btn"
-                    onClick={handleRemoveFile}
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-              
-              <div className="file-upload-container">
-                <div className="file-upload-area">
-                  <input
-                    type="file"
-                    id="file-upload"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="file-input"
-                  />
-                  <label htmlFor="file-upload" className="file-upload-label">
-                    <span className="upload-icon">📷</span>
-                    <span className="upload-text">
-                      {selectedFile ? 'Change Image' : 'Choose Featured Image'}
-                    </span>
-                    <span className="upload-hint">JPG, PNG, GIF (max 5MB)</span>
-                  </label>
-                </div>
-                
-                <div className="upload-divider">
-                  <span>OR</span>
-                </div>
-                
-                <div className="url-input-container">
-                  <input
-                    type="url"
-                    id="featuredImage"
-                    name="featuredImage"
-                    value={formData.featuredImage}
-                    onChange={handleInputChange}
-                    className="form-input"
-                    placeholder="Enter image URL"
-                    disabled={!!selectedFile}
-                  />
-                </div>
-              </div>
-              {errors.featuredImage && <span className="error-message">{errors.featuredImage}</span>}
-            </div>
-
-            <div className="blog-form-section">
-              <h3 className="section-title">
-                <span className="section-icon">🏷️</span>
-                Tags & SEO
-              </h3>
-
-              <div className="form-group">
-                <label className="form-label">Tags</label>
-                <div className="tag-input-container">
-                  <input
-                    type="text"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleTagAdd())}
-                    className="form-input"
-                    placeholder="Add a tag and press Enter"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleTagAdd}
-                    className="add-tag-btn"
-                  >
-                    Add
-                  </button>
-                </div>
-                
-                <div className="tags-list">
-                  {formData.tags.map((tag, index) => (
-                    <span key={index} className="tag">
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => handleTagRemove(tag)}
-                        className="tag-remove"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
 
               <div className="form-group">
                 <label htmlFor="seoTitle" className="form-label">
@@ -605,23 +450,132 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
                 />
               </div>
             </div>
+
+            {/* Save Details Button - Before Image Section */}
+            <div style={{ padding: '20px', borderTop: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', margin: '20px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleSaveDetails}
+                  disabled={isSavingBlog || blogSaved}
+                  style={{
+                    padding: '12px 30px',
+                    background: blogSaved ? '#81c784' : '#4caf50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: (isSavingBlog || blogSaved) ? 'not-allowed' : 'pointer',
+                    opacity: blogSaved ? 0.7 : 1,
+                    fontSize: '16px',
+                    fontWeight: '500',
+                    boxShadow: blogSaved ? 'none' : '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  {isSavingBlog ? (
+                    <span>💾 Saving Details...</span>
+                  ) : blogSaved ? (
+                    <span>✅ Details Saved</span>
+                  ) : (
+                    <span>💾 Save Details</span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Image Section - Moved to bottom after all details */}
+            <div className="blog-form-section">
+              <h3 className="section-title">
+                <span className="section-icon">🖼️</span>
+                Featured Image
+              </h3>
+
+              {imagePreview && (
+                <div className="image-preview-container">
+                  <img
+                    src={imagePreview}
+                    alt="Featured image preview"
+                    className="image-preview"
+                  />
+                  <button
+                    type="button"
+                    className="remove-image-btn"
+                    onClick={handleRemoveFile}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              <div className="file-upload-container">
+                <div className="file-upload-area" style={{
+                  opacity: blogSaved ? 1 : 0.6,
+                  pointerEvents: blogSaved ? 'auto' : 'none'
+                }}>
+                  <input
+                    type="file"
+                    id="file-upload"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="file-input"
+                    disabled={!blogSaved}
+                  />
+                  <label htmlFor="file-upload" className="file-upload-label" style={{
+                    cursor: blogSaved ? 'pointer' : 'not-allowed'
+                  }}>
+                    <span className="upload-icon">📷</span>
+                    <span className="upload-text">
+                      {selectedFile ? 'Change Image' : blogSaved ? 'Choose Featured Image' : 'Save details first'}
+                    </span>
+                    <span className="upload-hint">JPG, PNG, GIF (max 5MB)</span>
+                  </label>
+                </div>
+
+                <div className="upload-divider">
+                  <span>OR</span>
+                </div>
+
+              </div>
+            </div>
           </div>
 
-          <div className="blog-modal-footer">
+          {/* Error message */}
+          {submitError && (
+            <div style={{ padding: '10px', margin: '10px 20px', background: '#fee', color: '#c33', borderRadius: '4px', border: '1px solid #fcc' }}>
+              <strong>Error:</strong> {submitError}
+            </div>
+          )}
+
+          <div className="blog-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
               onClick={handleClose}
               className="btn-cancel"
-              disabled={isSubmitting}
+              disabled={isSavingBlog || isUploadingImage}
             >
               Cancel
             </button>
+
+            {/* Save All Button - Uploads image and completes */}
             <button
-              type="submit"
-              className="btn-add"
-              disabled={isSubmitting}
+              type="button"
+              onClick={handleSaveAll}
+              disabled={!blogSaved || isUploadingImage}
+              style={{
+                padding: '10px 20px',
+                background: (!blogSaved || isUploadingImage) ? '#ccc' : '#2196f3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: (!blogSaved || isUploadingImage) ? 'not-allowed' : 'pointer'
+              }}
             >
-              {isSubmitting ? 'Saving...' : editingBlog ? 'Update Blog' : 'Create Blog'}
+              {isUploadingImage ? (
+                <span>📤 Uploading Image...</span>
+              ) : !blogSaved ? (
+                <span>💾 Save Details First</span>
+              ) : (
+                <span>💾 {editingBlog ? 'Update Blog' : (selectedFile ? 'Save All' : 'Complete')}</span>
+              )}
             </button>
           </div>
         </form>

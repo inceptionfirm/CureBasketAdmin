@@ -44,6 +44,18 @@ const sideBarItems: SideBarItem[] = [
         link: "/medicine"
     },
     {
+        title: "Bank & Contact",
+        icon: "🏦",
+        key: "bank-contact",
+        link: "/bank-contact"
+    },
+    {
+        title: "Dispense",
+        icon: "📦",
+        key: "dispense",
+        link: "/dispense"
+    },
+    {
         title: "Roles",
         icon: "👤",
         key: "roles",

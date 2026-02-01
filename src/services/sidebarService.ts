@@ -71,18 +71,32 @@ const DEFAULT_MENU_ITEMS: SidebarMenuItem[] = [
     order: 7
   },
   {
+    id: 'bank-contact',
+    title: 'Bank & Contact',
+    icon: '🏦',
+    path: '/bank-contact',
+    order: 8
+  },
+  {
+    id: 'dispense',
+    title: 'Dispense',
+    icon: '📦',
+    path: '/dispense',
+    order: 9
+  },
+  {
     id: 'profile',
     title: 'Profile',
     icon: '👤',
     path: '/profile',
-    order: 8
+    order: 10
   },
   {
     id: 'settings',
     title: 'Settings',
     icon: '⚙️',
     path: '/settings',
-    order: 9
+    order: 11
   }
 ];
 
@@ -100,7 +114,7 @@ class SidebarService {
       // Try mock API first (for development/testing)
       try {
         const data = await mockSidebarApi.getSidebarConfig();
-        
+
         if (this.validateSidebarConfig(data)) {
           this.cache = {
             menuItems: data.menuItems || [],
@@ -118,7 +132,7 @@ class SidebarService {
       // Try real API (endpoint doesn't exist yet, so this will fail gracefully)
       // Using apiClient would be better, but for now we'll just skip it
       // and return default config to avoid 404 errors
-      
+
       // Note: Sidebar config endpoint doesn't exist on backend yet
       // When it's available, uncomment this section:
       /*
@@ -163,16 +177,16 @@ class SidebarService {
 
   private validateSidebarConfig(data: any): boolean {
     if (!data || typeof data !== 'object') return false;
-    
+
     if (!Array.isArray(data.menuItems)) return false;
-    
+
     // Validate each menu item
     for (const item of data.menuItems) {
       if (!item.id || !item.title || !item.path) {
         return false;
       }
     }
-    
+
     return true;
   }
 
@@ -181,8 +195,8 @@ class SidebarService {
       if (!item.permissions || item.permissions.length === 0) {
         return true;
       }
-      
-      return item.permissions.some(permission => 
+
+      return item.permissions.some(permission =>
         userPermissions.includes(permission)
       );
     }).map(item => ({

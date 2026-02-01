@@ -20,6 +20,7 @@
   width: 100%;
   max-width: 800px;
   max-height: 90vh;
+  height: 90vh;
   overflow: hidden;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   position: relative;
@@ -84,8 +85,32 @@
 
 .blog-modal-form {
   padding: 2.5rem;
-  max-height: calc(90vh - 100px);
+  flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: auto;
+  scrollbar-color: #10b981 #f1f5f9;
+}
+
+.blog-modal-form::-webkit-scrollbar {
+  width: 10px;
+}
+
+.blog-modal-form::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 5px;
+}
+
+.blog-modal-form::-webkit-scrollbar-thumb {
+  background: #10b981;
+  border-radius: 5px;
+  border: 2px solid #f1f5f9;
+}
+
+.blog-modal-form::-webkit-scrollbar-thumb:hover {
+  background: #059669;
 }
 
 .blog-form-content {
@@ -388,27 +413,102 @@
 }
 
 @media (max-width: 480px) {
+  .blog-modal-overlay {
+    padding: 0;
+    align-items: flex-start;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .blog-modal-container {
     max-width: 100vw;
-    margin: 0.5rem;
-    max-height: 95vh;
-  }
-
-  .blog-modal-form {
-    padding: 1rem;
-  }
-
-  .blog-modal-footer {
-    padding: 1rem;
+    width: 100%;
+    margin: 0;
+    max-height: 100vh;
+    min-height: 100vh;
+    border-radius: 0;
+    display: flex;
     flex-direction: column;
   }
 
+  .blog-modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    flex-shrink: 0;
+  }
+
+  .blog-modal-close-btn {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 1.25rem !important;
+    background: white !important;
+    color: #dc2626 !important;
+    border: 2px solid white !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  .blog-modal-form {
+    padding: 1.5rem 1rem;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    touch-action: pan-y;
+  }
+  
+  .blog-modal-form::-webkit-scrollbar {
+    width: 14px;
+  }
+
+  .blog-modal-footer {
+    padding: 1.25rem 1rem;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    z-index: 1000;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+    border-top: 2px solid #e5e7eb;
+  }
+}
+
+@media (max-width: 300px) {
+  .blog-modal-header {
+    padding: 0.75rem;
+  }
+
+  .blog-modal-close-btn {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 1.1rem !important;
+  }
+
+  .blog-modal-title {
+    font-size: 0.9rem;
+  }
+
+  .blog-modal-form {
+    padding: 1rem 0.75rem;
+  }
+
+  .blog-modal-footer {
+    padding: 1rem 0.75rem;
+  }
+
+  .blog-modal-footer button {
+    width: 100%;
+  }
+
   .section-title {
-    font-size: 1rem;
+    font-size: 0.9rem;
   }
 
   .upload-icon {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
   }
 }
 

@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { fileUploadService } from './fileUploadService';
 
 // Blog API Types based on actual backend structure
 export interface BlogMainAttribute {
@@ -57,39 +58,40 @@ class BlogService {
 
   // 6. Create New Blog
   // POST /blog/add-blog
-  // Payload: { itemType, category, status, title, content, excerpt, seoTitle, seoDescription }
+  // New structure: { itemType, position, type, title, description, status, priority }
   async createBlog(blogData: {
     itemType?: 'BLOG';
-    category?: string;
-    status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+    position?: string;
+    type?: string;
     title?: string;
+    description?: string;
+    status?: string;
+    priority?: number | string;
+    // Legacy fields for backward compatibility
+    category?: string;
+    categoryId?: number;
     content?: string;
     excerpt?: string;
     seoTitle?: string;
     seoDescription?: string;
-    // Legacy fields for backward compatibility
-    id?: number;
-    categoryId?: number;
     itemName?: string;
     itemHeading?: string;
     itemDescription?: string;
     author?: string;
-    priority?: 'HIGH' | 'MEDIUM' | 'LOW';
     tags?: string[];
     publishDate?: string;
     active?: boolean;
     mainAttributes?: BlogMainAttribute[];
   }): Promise<{ success: boolean; message?: string; data?: Blog }> {
-    // Build payload matching curl structure exactly
+    // Build payload with new structure
     const payload: any = {
       itemType: blogData.itemType || 'BLOG',
-      category: blogData.category || blogData.categoryId?.toString() || '',
-      status: blogData.status || 'DRAFT',
-      title: blogData.title || blogData.itemName || '',
-      content: blogData.content || blogData.itemDescription || '',
-      excerpt: blogData.excerpt || '',
-      seoTitle: blogData.seoTitle || blogData.title || '',
-      seoDescription: blogData.seoDescription || blogData.excerpt || ''
+      position: blogData.position || '',
+      type: blogData.type || '',
+      title: blogData.title || blogData.itemName || blogData.itemHeading || '',
+      description: blogData.description || blogData.content || blogData.itemDescription || '',
+      status: blogData.status || (blogData.active ? 'ACTIVE' : 'DRAFT'),
+      priority: blogData.priority !== undefined ? blogData.priority : 0,
     };
     
     // Remove only null/undefined values, but keep empty strings for optional fields
@@ -449,6 +451,63 @@ class BlogService {
       success: true,
       message: response.message || 'Blog deleted successfully',
     };
+  }
+
+  // 6. Upload Blog Files
+  /**
+   * Upload image files for a blog
+   * Uses the common catalog upload endpoint: /catalog/upload/file/{blogId}
+   * 
+   * @param blogId - Blog ID
+   * @param files - Array of image files to upload
+   * @param docTypes - Optional document types (e.g., ['thumbnail', 'featuredImage', 'CoverPagePic'])
+   * @returns Promise with upload response
+   * 
+   * @example
+   * await blogService.uploadFiles(45, [file1, file2], ['thumbnail', 'featuredImage']);
+   */
+  async uploadFiles(
+    blogId: number,
+    files: File[],
+    docTypes?: string[]
+  ): Promise<{ success: boolean; message?: string; data?: any }> {
+    try {
+      const response = await fileUploadService.uploadBlogFiles(blogId, files, docTypes);
+      return {
+        success: response.success,
+        message: response.message,
+        data: response.data,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload blog files';
+      console.error('❌ Error uploading blog files:', error);
+      throw new Error(errorMessage);
+    }
+  }
+
+  // 7. Delete Blog File
+  /**
+   * Delete a file associated with a blog
+   * Uses the common catalog delete endpoint: /catalog/delete/file?fileId={fileId}
+   * 
+   * @param fileId - File ID to delete
+   * @returns Promise with delete response
+   * 
+   * @example
+   * await blogService.deleteFile(123);
+   */
+  async deleteFile(fileId: number): Promise<{ success: boolean; message?: string }> {
+    try {
+      const response = await fileUploadService.deleteFile(fileId);
+      return {
+        success: response.success,
+        message: response.message,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete blog file';
+      console.error('❌ Error deleting blog file:', error);
+      throw new Error(errorMessage);
+    }
   }
 }
 
