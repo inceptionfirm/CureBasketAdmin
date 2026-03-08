@@ -1,12 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './MedicationEditor.css';
 
 export interface Medication {
   id?: string;
   name: string;
+  /** Catalog medicine ID for map-medicine API */
+  medicineId?: number;
   dosage?: string;
   frequency?: string;
   duration?: string;
+  /** Quantity for map-medicine API */
+  quantity?: string;
+  instructions?: string;
+}
+
+export interface MedicineOption {
+  id: number;
+  name: string;
+  manufacturer?: string;
 }
 
 interface MedicationEditorProps {
@@ -14,15 +25,44 @@ interface MedicationEditorProps {
   onMedicationsChange: (medications: Medication[]) => void;
   editable?: boolean;
   className?: string;
+  /** Loaded medicines for search/autocomplete (stored in parent state) */
+  medicineOptions?: MedicineOption[];
+  /** Called when user clicks Save medicine (only when editable) */
+  onSaveMedications?: () => void;
+  saving?: boolean;
 }
 
 const MedicationEditor: React.FC<MedicationEditorProps> = ({
   medications,
   onMedicationsChange,
   editable = true,
-  className = ''
+  className = '',
+  medicineOptions = [],
+  onSaveMedications,
+  saving = false,
 }) => {
   const [localMedications, setLocalMedications] = useState<Medication[]>(medications);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setLocalMedications(medications);
+  }, [medications]);
+
+  const getFilteredMedicines = useCallback(
+    (query: string): MedicineOption[] => {
+      if (!query.trim()) return medicineOptions.slice(0, 15);
+      const q = query.trim().toLowerCase();
+      return medicineOptions
+        .filter(
+          (m) =>
+            m.name.toLowerCase().includes(q) ||
+            (m.manufacturer && m.manufacturer.toLowerCase().includes(q))
+        )
+        .slice(0, 15);
+    },
+    [medicineOptions]
+  );
 
   const handleAddMedication = () => {
     const newMedication: Medication = {
@@ -30,7 +70,8 @@ const MedicationEditor: React.FC<MedicationEditorProps> = ({
       name: '',
       dosage: '',
       frequency: '',
-      duration: ''
+      duration: '',
+      quantity: ''
     };
     const updated = [...localMedications, newMedication];
     setLocalMedications(updated);
@@ -43,12 +84,29 @@ const MedicationEditor: React.FC<MedicationEditorProps> = ({
     onMedicationsChange(updated);
   };
 
-  const handleMedicationChange = (id: string, field: keyof Medication, value: string) => {
+  const handleMedicationChange = (id: string, field: keyof Medication, value: string | number | undefined) => {
     const updated = localMedications.map(med =>
       med.id === id ? { ...med, [field]: value } : med
     );
     setLocalMedications(updated);
     onMedicationsChange(updated);
+  };
+
+  const handleSelectMedicine = (medicationId: string, option: MedicineOption) => {
+    const updated = localMedications.map((med) =>
+      med.id === medicationId ? { ...med, name: option.name, medicineId: option.id } : med
+    );
+    setLocalMedications(updated);
+    onMedicationsChange(updated);
+    setOpenDropdownId(null);
+  };
+
+  const handleNameFocus = (id: string) => {
+    setOpenDropdownId(id);
+  };
+
+  const handleNameBlur = () => {
+    setTimeout(() => setOpenDropdownId(null), 200);
   };
 
   if (!editable && localMedications.length === 0) {
@@ -83,7 +141,8 @@ const MedicationEditor: React.FC<MedicationEditorProps> = ({
           <p>No medications added. Click "Add Medication" to add medicines.</p>
         </div>
       ) : (
-        <div className="medications-list">
+        <>
+          <div className="medications-list">
           {localMedications.map((medication, index) => (
             <div key={medication.id || index} className="medication-item">
               <div className="medication-item-header">
@@ -106,14 +165,45 @@ const MedicationEditor: React.FC<MedicationEditorProps> = ({
                     Medicine Name <span className="required">*</span>
                   </label>
                   {editable ? (
-                    <input
-                      type="text"
-                      value={medication.name}
-                      onChange={(e) => handleMedicationChange(medication.id!, 'name', e.target.value)}
-                      placeholder="e.g., Paracetamol 500mg"
-                      className="medication-input"
-                      required
-                    />
+                    <div className="medication-autocomplete" ref={openDropdownId === medication.id ? dropdownRef : undefined}>
+                      <input
+                        type="text"
+                        value={medication.name}
+                        onChange={(e) => handleMedicationChange(medication.id!, 'name', e.target.value)}
+                        onFocus={() => handleNameFocus(medication.id!)}
+                        onBlur={handleNameBlur}
+                        placeholder="Search or type medicine name..."
+                        className="medication-input"
+                        required
+                        autoComplete="off"
+                      />
+                      {medicineOptions.length > 0 && openDropdownId === medication.id && (
+                        <div className="medication-autocomplete-dropdown">
+                          {getFilteredMedicines(medication.name).length === 0 ? (
+                            <div className="medication-autocomplete-item medication-autocomplete-empty">
+                              No matching medicine. Type to search or enter manually.
+                            </div>
+                          ) : (
+                            getFilteredMedicines(medication.name).map((opt) => (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                className="medication-autocomplete-item"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleSelectMedicine(medication.id!, opt);
+                                }}
+                              >
+                                <span className="medication-autocomplete-name">{opt.name}</span>
+                                {opt.manufacturer && (
+                                  <span className="medication-autocomplete-meta"> · {opt.manufacturer}</span>
+                                )}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="medication-value">{medication.name || '—'}</div>
                   )}
@@ -163,10 +253,38 @@ const MedicationEditor: React.FC<MedicationEditorProps> = ({
                     <div className="medication-value">{medication.duration || '—'}</div>
                   )}
                 </div>
+
+                <div className="medication-field">
+                  <label className="medication-label">Quantity</label>
+                  {editable ? (
+                    <input
+                      type="text"
+                      value={medication.quantity || ''}
+                      onChange={(e) => handleMedicationChange(medication.id!, 'quantity', e.target.value)}
+                      placeholder="e.g., 30"
+                      className="medication-input"
+                    />
+                  ) : (
+                    <div className="medication-value">{medication.quantity || '—'}</div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
-        </div>
+          </div>
+          {editable && onSaveMedications && (
+            <div className="medication-editor-save">
+              <button
+                type="button"
+                onClick={onSaveMedications}
+                className="btn-save-medication"
+                disabled={saving || localMedications.length === 0}
+              >
+                {saving ? 'Saving...' : 'Save medicine'}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

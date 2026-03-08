@@ -27,6 +27,7 @@ const MedicinePage: React.FC = () => {
     lowStockCount: 0,
     totalValue: 0
   });
+  const [apiTotalReported, setApiTotalReported] = useState<number | null>(null);
   const [sortBy] = useState('name');
 
 
@@ -66,12 +67,15 @@ const MedicinePage: React.FC = () => {
             apiMedicine.form || 
             (apiMedicine.mainAttributes?.find((attr: any) => attr.name?.toLowerCase() === 'form')?.value) ||
             '',
-      price: apiMedicine.price || 0,
-      stock: apiMedicine.stock || apiMedicine.stockQuantity || 0,
-      sku: apiMedicine.sku || 
-           apiMedicine.SKU || 
+      price: Number(apiMedicine.price) ||
+        Number(apiMedicine.mainAttributes?.find((attr: any) => attr.name?.toLowerCase() === 'price')?.value) ||
+        0,
+      stock: Number(apiMedicine.stock) ?? Number(apiMedicine.stockQuantity) ?? 0,
+      sku: apiMedicine.sku ||
+           apiMedicine.SKU ||
            (apiMedicine.mainAttributes?.find((attr: any) => attr.name?.toLowerCase() === 'sku')?.value) ||
            '',
+      barcode: apiMedicine.barcode ?? '',
       status: apiMedicine.status?.toUpperCase() === 'INACTIVE' ? 'inactive' : 'active',
       image: (() => {
         // Extract image from multiple possible sources
@@ -166,7 +170,17 @@ const MedicinePage: React.FC = () => {
       countryOfOrigin: apiMedicine.countryOfOrigin ||
         apiMedicine.country_of_origin ||
         (apiMedicine.mainAttributes?.find((attr: any) => attr.name?.toLowerCase() === 'countryoforigin' || attr.name?.toLowerCase() === 'country_of_origin')?.value) ||
-        ''
+        '',
+      precautions: apiMedicine.precautions ?? '',
+      sideEffects: apiMedicine.sideEffects ?? '',
+      howToUse: apiMedicine.howToUse ?? apiMedicine.dosage ?? apiMedicine.usage ?? '',
+      salt: apiMedicine.medicineSalt ?? apiMedicine.salt ?? apiMedicine.saltComposition ?? '',
+      medicineSalt: apiMedicine.medicineSalt ?? apiMedicine.salt ?? null,
+      faqs: (apiMedicine.medicineFaq || apiMedicine.faqs || []).map((f: any) => ({
+        question: f.question || f.q || '',
+        answer: f.answer || f.a || '',
+        serialId: f.serialId
+      }))
     };
   };
 
@@ -175,10 +189,9 @@ const MedicinePage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Fetch all medicines for client-side pagination
-      const response = await medicineService.getAllMedicines({
-        page: 0,
-        size: 1000, // Fetch all for client-side pagination
+      // Fetch all medicines (all pages) so list count matches API total
+      const response = await medicineService.getAllMedicinesAllPages({
+        pageSize: 10,
         ...(sortBy && sortBy.trim() !== '' ? { sortBy: sortBy } : {}),
         ...params,
       });
@@ -197,12 +210,14 @@ const MedicinePage: React.FC = () => {
       }
 
       const mappedMedicines = (response.medicines || []).map(mapApiMedicineToUI);
-      
+
+      setApiTotalReported(response.totalRecordsFromApi ?? null);
+
       // Log IDs for debugging (can be removed later)
       if (mappedMedicines.length > 0 && !mappedMedicines[0].id) {
         console.warn('⚠️ Medicines mapped but IDs missing:', mappedMedicines[0]);
       }
-      
+
       setMedicines(mappedMedicines);
       const total = response.pagination?.total || mappedMedicines.length;
       setPagination(prev => ({
@@ -217,7 +232,7 @@ const MedicinePage: React.FC = () => {
       const lowStockMeds = mappedMedicines.filter(med => (med.stock || 0) < 10).length;
       
       setAnalytics({
-        totalMedicines: response.pagination.total,
+        totalMedicines: mappedMedicines.length,
         activeMedicines: activeMeds,
         lowStockCount: lowStockMeds,
         totalValue
@@ -283,12 +298,11 @@ const MedicinePage: React.FC = () => {
 
   const handleBulkStatusChange = async (status: 'active' | 'inactive') => {
     if (selectedMedicines.length === 0) return;
-    
+    const statusApi = status === 'inactive' ? 'INACTIVE' : 'ACTIVE';
     try {
-      // Update only status field - API accepts single field in request body
       await Promise.all(
-        selectedMedicines.map(medicine => 
-          medicineService.updateMedicine(Number(medicine.id), { status: status.toLowerCase() })
+        selectedMedicines.map(medicine =>
+          medicineService.updateMedicine(Number(medicine.id), { status: statusApi })
         )
       );
       await loadMedicines();
@@ -304,120 +318,77 @@ const MedicinePage: React.FC = () => {
       console.log('💉 handleAddMedicine called with:', medicineData);
       
       if (editingMedicine) {
-        // Build update payload - only include fields that are being updated
-        // API accepts single or multiple fields in request body
-        const updatePayload: any = {};
-        
-        // String fields - only add if not empty (except description which can be empty)
-        if (medicineData.name !== undefined && medicineData.name !== null && medicineData.name !== '') {
-          updatePayload.name = medicineData.name;
-        }
-        if (medicineData.genericName !== undefined && medicineData.genericName !== null && medicineData.genericName !== '') {
-          updatePayload.genericName = medicineData.genericName;
-        }
-        if (medicineData.manufacturer !== undefined && medicineData.manufacturer !== null && medicineData.manufacturer !== '') {
-          updatePayload.manufacturer = medicineData.manufacturer;
-        }
-        if (medicineData.form !== undefined && medicineData.form !== null && medicineData.form !== '') {
-          updatePayload.medicineForm = medicineData.form;
-        }
-        if (medicineData.category !== undefined && medicineData.category !== null && medicineData.category !== '') {
-          updatePayload.category = medicineData.category;
-        }
-        if (medicineData.sku !== undefined && medicineData.sku !== null && medicineData.sku !== '') {
-          updatePayload.sku = medicineData.sku;
-        }
-        if (medicineData.strength !== undefined && medicineData.strength !== null && medicineData.strength !== '') {
-          updatePayload.strength = medicineData.strength;
-        }
-        // Country of Origin - include if defined (can be empty string to clear it)
-        if (medicineData.countryOfOrigin !== undefined && medicineData.countryOfOrigin !== null) {
-          updatePayload.countryOfOrigin = medicineData.countryOfOrigin;
-        }
-        // Description - always include if present (can be empty string)
-        if ('description' in medicineData) {
-          updatePayload.description = medicineData.description || '';
-        }
-        if (medicineData.status !== undefined && medicineData.status !== null && medicineData.status !== '') {
-          updatePayload.status = medicineData.status.toLowerCase();
-        }
-        if (medicineData.barcode !== undefined && medicineData.barcode !== null) {
-          updatePayload.barcode = medicineData.barcode || '';
-        }
-        if (medicineData.expiryDate !== undefined && medicineData.expiryDate !== null && medicineData.expiryDate !== '') {
-          updatePayload.expiryDate = medicineData.expiryDate;
-        }
-        
-        // Number fields - add if defined (can be 0)
-        if (medicineData.price !== undefined && medicineData.price !== null) {
-          updatePayload.price = Number(medicineData.price);
-        }
-        if (medicineData.stock !== undefined && medicineData.stock !== null) {
-          updatePayload.stock = Number(medicineData.stock);
-        }
-        
-        // Boolean fields - add if defined
-        if (medicineData.prescriptionRequired !== undefined && medicineData.prescriptionRequired !== null) {
-          updatePayload.prescriptionRequired = Boolean(medicineData.prescriptionRequired);
-        }
-
-        // Image field - can be null or string
-        // Always include image field if present (even if empty string, to clear it)
-        if ('image' in medicineData) {
-          updatePayload.image = medicineData.image || null;
-        }
-        
-        if (Object.keys(updatePayload).length === 0) {
-          throw new Error('No fields to update');
-        }
-        
-        const medicineId = (editingMedicine as any).numericId || 
-                          (typeof editingMedicine.id === 'string' 
-                            ? Number(editingMedicine.id) 
-                            : editingMedicine.id);
-        
+        // Update: exact API keys per backend (medicineFaq with serialId, category/image/files/medicineSalt)
+        const medicineId = (editingMedicine as any).numericId ||
+          (typeof editingMedicine.id === 'string' ? Number(editingMedicine.id) : editingMedicine.id);
         if (!medicineId || isNaN(medicineId) || medicineId <= 0) {
           throw new Error(`Invalid medicine ID: ${editingMedicine.id}. Please refresh the page and try again.`);
         }
-        
-        // Log update payload for debugging
-        console.log('💉 Update payload:', updatePayload);
-        console.log('💉 Description in payload:', updatePayload.description);
-        
-        // Send only the fields to update in request body
-          await medicineService.updateMedicine(medicineId, updatePayload);
+        const statusUpper = (medicineData.status || 'active').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+        const updatePayload: any = {
+          name: medicineData.name ?? '',
+          description: medicineData.description ?? '',
+          manufacturer: medicineData.manufacturer ?? '',
+          medicineForm: medicineData.form ?? '',
+          status: statusUpper,
+          sku: medicineData.sku ?? '',
+          price: Number(medicineData.price) ?? 0,
+          stock: Number(medicineData.stock) ?? 0,
+          barcode: medicineData.barcode ?? '',
+          prescriptionRequired: Boolean(medicineData.prescriptionRequired),
+          countryOfOrigin: medicineData.countryOfOrigin ?? null,
+          precautions: medicineData.precautions ?? '',
+          sideEffects: medicineData.sideEffects ?? '',
+          howToUse: medicineData.howToUse ?? '',
+          category: medicineData.category || null,
+          image: medicineData.image || null,
+          files: null,
+          medicineSalt: (medicineData.salt || (editingMedicine as any).medicineSalt) ?? null,
+          genericName: medicineData.genericName ?? '',
+          strength: medicineData.strength ?? '',
+          medicineFaq: (medicineData.faqs && Array.isArray(medicineData.faqs))
+            ? medicineData.faqs
+                .filter((faq: any) => faq && (faq.question || faq.q) && (faq.answer || faq.a))
+                .map((faq: any) => ({
+                  question: faq.question || faq.q,
+                  answer: faq.answer || faq.a,
+                  ...(faq.serialId && { serialId: faq.serialId })
+                }))
+            : []
+        };
 
-        // Return the medicine ID for image upload
+        console.log('💉 Update payload (API keys):', updatePayload);
+        await medicineService.updateMedicine(medicineId, updatePayload);
         return medicineId;
       } else {
-        // Match exact curl payload structure
+        // Create: exact API keys per backend (no category, no image in create)
+        const statusUpper = (medicineData.status || 'active').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
         const createPayload: any = {
           name: medicineData.name,
           description: medicineData.description || '',
-          image: medicineData.image || null, // Include image URL if provided
-          category: medicineData.category || '',
           manufacturer: medicineData.manufacturer || '',
           medicineForm: medicineData.form || '',
-          status: (medicineData.status || 'active').toLowerCase(),
+          status: statusUpper,
           sku: medicineData.sku || '',
           price: Number(medicineData.price) || 0,
           stock: Number(medicineData.stock) || 0,
           barcode: medicineData.barcode || '',
-          prescriptionRequired: medicineData.prescriptionRequired || false
+          prescriptionRequired: Boolean(medicineData.prescriptionRequired),
+          countryOfOrigin: medicineData.countryOfOrigin || '',
+          precautions: medicineData.precautions || '',
+          sideEffects: medicineData.sideEffects || '',
+          howToUse: medicineData.howToUse || '',
+          genericName: medicineData.genericName || '',
+          strength: medicineData.strength || '',
+          medicineSalt: medicineData.salt || null,
+          medicineFaq: (medicineData.faqs && Array.isArray(medicineData.faqs))
+            ? medicineData.faqs
+                .filter((faq: any) => faq && (faq.question || faq.q) && (faq.answer || faq.a))
+                .map((faq: any) => ({ question: faq.question || faq.q, answer: faq.answer || faq.a }))
+            : []
         };
-        
-        console.log('💉 Create payload with image:', {
-          image: createPayload.image,
-          imageType: typeof createPayload.image,
-          imageLength: createPayload.image?.length
-        });
-        
-        // Optional fields
-        if (medicineData.genericName) createPayload.genericName = medicineData.genericName;
-        if (medicineData.strength) createPayload.strength = medicineData.strength;
-        if (medicineData.expiryDate) createPayload.expiryDate = medicineData.expiryDate;
-        if (medicineData.countryOfOrigin) createPayload.countryOfOrigin = medicineData.countryOfOrigin;
 
+        console.log('💉 Create payload (API keys):', createPayload);
         console.log('💉 Calling createMedicine API...');
         const createResult = await medicineService.createMedicine(createPayload);
         console.log('✅ Medicine created successfully:', createResult);
@@ -469,16 +440,26 @@ const MedicinePage: React.FC = () => {
     }
   };
 
-  const handleEditMedicine = (medicine: Medicine) => {
-      setError(null);
-      const medicineForEdit = medicine as any;
-      
-      if (!medicineForEdit.form) {
-        medicineForEdit.form = medicineForEdit.medicineForm || medicineForEdit.dosageForm || '';
-      }
-      
-      setEditingMedicine(medicineForEdit);
-    setIsAddMedicineModalOpen(true);
+  const handleEditMedicine = async (medicine: Medicine) => {
+    setError(null);
+    const medicineId = (medicine as any).numericId ?? Number((medicine as any).id);
+    if (!medicineId || isNaN(medicineId)) {
+      setError('Invalid medicine ID');
+      return;
+    }
+    try {
+      // Fetch full medicine by ID so all fields (barcode, precautions, sideEffects, howToUse, medicineFaq, etc.) are prefilled
+      const fullMedicine = await medicineService.getMedicineById(medicineId);
+      const mapped = mapApiMedicineToUI(fullMedicine);
+      const forEdit = mapped as any;
+      if (!forEdit.form) forEdit.form = forEdit.medicineForm || forEdit.dosageForm || '';
+      setEditingMedicine(forEdit);
+      setIsAddMedicineModalOpen(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load medicine details';
+      setError(msg);
+      console.error('Failed to load medicine for edit:', err);
+    }
   };
 
   const handleCloseModal = () => {
@@ -592,12 +573,20 @@ const MedicinePage: React.FC = () => {
       {/* Bulk Actions */}
       {bulkActions}
 
+      {/* Partial list notice when API reports more than returned */}
+      {apiTotalReported != null && medicines.length < apiTotalReported && (
+        <div className="medicine-partial-notice" role="status">
+          Showing {medicines.length} of {apiTotalReported} medicines. The API is not returning all pages; ask the backend team to fix <code>getAllMedicines</code> (support <code>size</code> or <code>page</code> &gt; 0).
+        </div>
+      )}
+
       {/* Medicines Grid */}
       <div className="medicines-section">
         <div className="section-header">
           <h2 className="section-title">Medicine Inventory</h2>
           <p className="section-subtitle">
             {filteredMedicines.length} of {medicines.length} medicines
+            {apiTotalReported != null && medicines.length < apiTotalReported && ` (${apiTotalReported} in database)`}
             {statusFilter !== 'all' && ` (${statusFilter})`}
           </p>
         </div>

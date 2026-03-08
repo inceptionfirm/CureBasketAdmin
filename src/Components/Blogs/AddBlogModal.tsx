@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocale } from '../../contexts/LocaleContext';
+import { categoryService, Category } from '../../services/categoryService';
 import './AddBlogModal.css';
 
 // Local Blog type for editing (matches what Blogs component uses)
@@ -54,7 +55,7 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
   editingBlog
 }) => {
   const { t } = useLocale();
-  
+
   const [formData, setFormData] = useState<BlogFormData>({
     title: '',
     category: '',
@@ -73,20 +74,54 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [hasExistingImage, setHasExistingImage] = useState<boolean>(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+
+  // Fetch categories from API
+  useEffect(() => {
+    const loadCategories = async () => {
+      if (!isOpen) return; // Only fetch when modal is open
+
+      try {
+        setLoadingCategories(true);
+        const response = await categoryService.getCategories({
+          page: 0,
+          pageSize: 100,
+          filters: {
+            status: 'active' // Only fetch active categories
+          }
+        });
+
+        console.log('📝 AddBlogModal: Fetched categories:', response.categories);
+        setCategories(response.categories || []);
+      } catch (error) {
+        console.error('❌ AddBlogModal: Failed to load categories:', error);
+        // Fallback to empty array if API fails
+        setCategories([]);
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+
+    if (isOpen) {
+      loadCategories();
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (editingBlog) {
       // Support both local Blog format and API Blog format
       // Check multiple possible fields for content
-      const content = editingBlog.content || 
-                      (editingBlog as any).itemDescription || 
-                      editingBlog.excerpt || 
-                      '';
-      const excerpt = editingBlog.excerpt || 
-                      (editingBlog as any).itemDescription || 
-                      editingBlog.content || 
-                      '';
-      
+      const content = editingBlog.content ||
+        (editingBlog as any).itemDescription ||
+        editingBlog.excerpt ||
+        '';
+      const excerpt = editingBlog.excerpt ||
+        (editingBlog as any).itemDescription ||
+        editingBlog.content ||
+        '';
+
       console.log('📝 Populating form for editing:', {
         editingBlog,
         content,
@@ -106,7 +141,7 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
           status = 'DRAFT';
         }
       }
-      
+
       setFormData({
         title: editingBlog.title || (editingBlog as any).itemName || '',
         category: editingBlog.category?.name || String((editingBlog as any).category || ''),
@@ -118,8 +153,10 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
       });
       if (editingBlog.featuredImage) {
         setImagePreview(editingBlog.featuredImage);
+        setHasExistingImage(true); // Mark that there's an existing image from API
       } else {
         setImagePreview('');
+        setHasExistingImage(false);
       }
     } else {
       resetForm();
@@ -139,6 +176,7 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
     setErrors({});
     setSelectedFile(null);
     setImagePreview('');
+    setHasExistingImage(false);
     setBlogSaved(false);
     setSavedBlogId(null);
     setSubmitError(null);
@@ -149,14 +187,14 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    
+
     setFormData(prev => {
       const newData = { ...prev, [name]: value };
-      
+
       if (name === 'title' && !editingBlog && !newData.seoTitle) {
-          newData.seoTitle = value;
+        newData.seoTitle = value;
       }
-      
+
       return newData;
     });
 
@@ -179,6 +217,7 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
       }
 
       setSelectedFile(file);
+      setHasExistingImage(false); // New file selected, so existing image is being replaced
       const reader = new FileReader();
       reader.onload = (e) => {
         const result = e.target?.result as string;
@@ -191,10 +230,19 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
   const handleRemoveFile = () => {
     setSelectedFile(null);
     setImagePreview('');
-    
+    setHasExistingImage(false);
+
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) {
       fileInput.value = '';
+    }
+  };
+
+  const handleReplaceImage = () => {
+    // Trigger file input click to allow selecting a new image
+    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
     }
   };
 
@@ -207,11 +255,11 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
     }
 
     if (!formData.content.trim()) {
-        newErrors.content = 'Content is required';
+      newErrors.content = 'Content is required';
     }
-    
+
     if (!formData.excerpt.trim()) {
-        newErrors.excerpt = 'Excerpt is required';
+      newErrors.excerpt = 'Excerpt is required';
     }
 
     setErrors(newErrors);
@@ -227,10 +275,10 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
     console.log('📝 Form submit triggered');
     console.log('📝 Form data:', formData);
     console.log('📝 Editing blog?', editingBlog ? 'Yes' : 'No');
-    
+
     const isValid = validateForm();
     console.log('📝 Form validation result:', isValid);
-    
+
     // For updates, allow submission even if validation fails
     // The parent component will handle missing content by using editingBlog data
     if (!isValid && !editingBlog) {
@@ -352,15 +400,21 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
                   <label htmlFor="category" className="form-label">
                     Category
                   </label>
-                  <input
-                    type="text"
+                  <select
                     id="category"
                     name="category"
                     value={formData.category}
                     onChange={handleInputChange}
-                    className="form-input"
-                    placeholder="e.g., Test_Category"
-                  />
+                    className="form-select"
+                    disabled={loadingCategories}
+                  >
+                    <option value="">
+                      {loadingCategories ? 'Loading categories...' : 'Select Category'}
+                    </option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.name}>{cat.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="form-group">
@@ -496,13 +550,25 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
                     alt="Featured image preview"
                     className="image-preview"
                   />
-                  <button
-                    type="button"
-                    className="remove-image-btn"
-                    onClick={handleRemoveFile}
-                  >
-                    ✕
-                  </button>
+                  <div className="image-preview-actions">
+                    {hasExistingImage && !selectedFile && (
+                      <button
+                        type="button"
+                        className="replace-image-btn"
+                        onClick={handleReplaceImage}
+                        disabled={!blogSaved}
+                      >
+                        🔄 Replace Image
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="remove-image-btn"
+                      onClick={handleRemoveFile}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -524,7 +590,13 @@ const AddBlogModal: React.FC<AddBlogModalProps> = ({
                   }}>
                     <span className="upload-icon">📷</span>
                     <span className="upload-text">
-                      {selectedFile ? 'Change Image' : blogSaved ? 'Choose Featured Image' : 'Save details first'}
+                      {selectedFile
+                        ? 'Change Image'
+                        : hasExistingImage && blogSaved
+                          ? 'Replace Image'
+                          : blogSaved
+                            ? 'Choose Featured Image'
+                            : 'Save details first'}
                     </span>
                     <span className="upload-hint">JPG, PNG, GIF (max 5MB)</span>
                   </label>

@@ -1,10 +1,41 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
+import {
+  LayoutDashboard,
+  Users,
+  FolderOpen,
+  FileText,
+  Image,
+  Pill,
+  FlaskConical,
+  Building2,
+  Truck,
+  ShoppingCart,
+  Package,
+  User,
+  Settings,
+  type LucideIcon
+} from 'lucide-react';
 import { useConfig } from '../../contexts/ConfigContext';
 import { useLocale } from '../../contexts/LocaleContext';
 import { SideBarProps, SideBarItem } from '../../types';
 import { sidebarService, SidebarMenuItem } from '../../services/sidebarService';
 import './SideBar.css';
+
+const SIDEBAR_ICON_MAP: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  users: Users,
+  categories: FolderOpen,
+  blogs: FileText,
+  'banner-management': Image,
+  prescriptions: Pill,
+  medicine: FlaskConical,
+  'bank-contact': Building2,
+  'order-shipping-config': Truck,
+  cart: ShoppingCart,
+  dispense: Package,
+  profile: User,
+  settings: Settings
+};
 
 const SideBar: React.FC<SideBarProps> = ({ currentView, onViewChange, isOpen = true }) => {
   const { config } = useConfig();
@@ -91,14 +122,22 @@ const SideBar: React.FC<SideBarProps> = ({ currentView, onViewChange, isOpen = t
           </div>
         ) : (
           <ul className="admin-sidebar-list">
-            {menuItems.map((item) => (
+            {menuItems.map((item) => {
+              const IconComponent = SIDEBAR_ICON_MAP[item.key];
+              return (
               <li key={item.key} className="admin-sidebar-item">
                 <button
                   className={`admin-sidebar-link ${currentView === item.key ? 'active' : ''}`}
                   onClick={() => handleItemClick(item.key)}
                   type="button"
                 >
-                  <span className="admin-sidebar-icon">{item.icon}</span>
+                  <span className="admin-sidebar-icon">
+                    {IconComponent ? (
+                      <IconComponent size={20} strokeWidth={2} aria-hidden />
+                    ) : (
+                      item.icon
+                    )}
+                  </span>
                   <span className="admin-sidebar-text">{item.title}</span>
                   {item.badge && (
                     <span className="admin-sidebar-badge">
@@ -107,7 +146,8 @@ const SideBar: React.FC<SideBarProps> = ({ currentView, onViewChange, isOpen = t
                   )}
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </nav>

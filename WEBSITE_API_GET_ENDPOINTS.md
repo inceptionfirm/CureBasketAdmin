@@ -1,4 +1,4 @@
-# Website API GET Endpoints (Public-Facing)
+  # Website API GET Endpoints (Public-Facing)
 
 This document contains **ONLY GET endpoints** for the public website. These endpoints are used to display content that admins have added through the admin panel.
 
@@ -165,7 +165,7 @@ const bannersToDisplay = getWebsiteBanners(data);
 
 ### 2.1 Get All Published Blogs
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=PUBLISHED&page=0&pageSize=10&sortBy=ID&sortOrder=DESC' \
+curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=PUBLISHED&page=0&pageSize=100&sortBy=ID&sortOrder=DESC' \
 --header 'Accept: application/json'
 ```
 
@@ -179,9 +179,11 @@ curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=B
         "id": 73,
         "itemType": "BLOG",
         "title": "My Blog Post",
-        "description": "Blog content here",
-        "status": "PUBLISHED",
+        "content": "Blog content here",
         "category": "wellness",
+        "status": "PUBLISHED",
+        "enabled": true,
+        "excerpt": "Blog excerpt",
         "files": [
           {
             "id": 9,
@@ -195,9 +197,9 @@ curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=B
     ],
     "pageInfo": {
       "pageNumber": 0,
-      "pageSize": 10,
-      "totalRecords": 25,
-      "totalPages": 3
+      "pageSize": 100,
+      "totalRecords": 5,
+      "totalPages": 1
     }
   }
 }
@@ -208,14 +210,23 @@ curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=B
 **Query Parameters:**
 - `itemType`: `BLOG` (required)
 - `status`: `PUBLISHED` (required - only show published blogs)
-- `page`: Page number (0-based)
-- `pageSize`: Items per page (default: 10)
+- `page`: Page number (0-based, default: 0)
+- `pageSize`: Items per page (recommended: 100 to get all blogs at once)
 - `sortBy`: `ID`, `Title`, `CreatedAt` (default: `ID`)
 - `sortOrder`: `ASC` or `DESC` (default: `DESC`)
 
-**Note:** 
-- Only `PUBLISHED` blogs should be shown on the website
-- `DRAFT` and `ARCHIVED` blogs should NOT be displayed
+**Important Notes:** 
+- Only blogs with **BOTH** `status: "PUBLISHED"` **AND** `enabled: true` will be returned
+- If `totalRecords` shows more blogs than `content` array, it means some published blogs have `enabled: false` and are filtered out
+- To show all published blogs on the website, ensure they have `enabled: true` in the admin panel
+- `DRAFT` and `ARCHIVED` blogs should NOT be displayed on the website
+- If you need to get all blogs, use `pageSize: 100` or implement pagination to fetch multiple pages
+
+**Troubleshooting:**
+If you see `totalRecords: 5` but only 3 items in `content`, check:
+1. Are all 5 blogs marked as `enabled: true` in the admin panel?
+2. Are all 5 blogs actually `status: "PUBLISHED"`?
+3. Try increasing `pageSize` to 100 or higher to ensure all records are returned
 
 ---
 
@@ -431,8 +442,8 @@ const fetchWebsiteBanners = async () => {
   }));
 };
 
-// Fetch Published Blogs
-const fetchPublishedBlogs = async (page = 0, pageSize = 10) => {
+// Fetch Published Blogs (with enabled check)
+const fetchPublishedBlogs = async (page = 0, pageSize = 100) => {
   const response = await fetch(
     `https://java.api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=PUBLISHED&page=${page}&pageSize=${pageSize}&sortBy=ID&sortOrder=DESC`,
     {
@@ -445,9 +456,10 @@ const fetchPublishedBlogs = async (page = 0, pageSize = 10) => {
   const data = await response.json();
   
   if (data.success && data.data.content) {
-    // Only PUBLISHED blogs should be returned, but double-check
+    // Filter: Only PUBLISHED AND enabled blogs should be displayed
+    // Backend already filters by enabled: true, but double-check for safety
     const publishedBlogs = data.data.content.filter(
-      blog => blog.status === 'PUBLISHED'
+      blog => blog.status === 'PUBLISHED' && (blog.enabled === true || blog.enabled === undefined)
     );
     
     // Construct image URLs
@@ -457,6 +469,9 @@ const fetchPublishedBlogs = async (page = 0, pageSize = 10) => {
         ? `https://java.api.curebasket.com${blog.files[0].docPath}`
         : '/default-blog.jpg'
     }));
+    
+    // Note: If pageInfo.totalRecords > content.length, some blogs have enabled: false
+    console.log(`Fetched ${publishedBlogs.length} published blogs (Total records: ${data.data.pageInfo?.totalRecords || 0})`);
     
     return {
       blogs: blogsWithImages,

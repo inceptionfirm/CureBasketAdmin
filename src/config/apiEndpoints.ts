@@ -47,6 +47,20 @@ export const API_ENDPOINTS = {
     delete: (id: number) => `/prescriptions/delete/${id}`,
   },
 
+  // Cart / Order endpoints (CartDTOs - API not live yet)
+  cart: {
+    getByCustomer: (customerId: number) => `/cart/get-by-customer/${customerId}`,
+    getAll: '/cart/get-all',
+    getById: (id: number) => `/cart/get/${id}`,
+    updateStatus: (id: number) => `/cart/update-status/${id}`,
+  },
+
+  // Customer endpoints (for cart lookup by name/mobile; view-cart uses logged-in user's token)
+  customer: {
+    search: '/customer/search',
+    viewCart: '/customer/cart/view-cart',
+  },
+
   // Medicine endpoints
   medicine: {
     create: '/medicines/createMedicine',
@@ -144,6 +158,10 @@ export const API_ENDPOINTS = {
     // Contact us information (shown on website)
     configureContactUsInfo: '/metadata/configure/contact-us',
     getContactUsInfo: '/metadata/get/contact-us',
+
+    // Order shipping config (shipping fee, discount range, tax rate)
+    configureOrderShippingConfig: '/metadata/configure/order-shipping-config',
+    getOrderShippingConfig: '/metadata/get/order-shipping-config',
   },
 } as const;
 

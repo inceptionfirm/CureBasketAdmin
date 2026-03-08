@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import StatusBadge from './StatusBadge';
 import MedicationEditor, { Medication } from './MedicationEditor';
 import PaymentVerification from './PaymentVerification';
@@ -28,24 +28,43 @@ export interface AdminPrescription {
   createdAt: string;
 }
 
-interface AdminPrescriptionDetailsProps {
+export interface MedicineOption {
+  id: number;
+  name: string;
+  manufacturer?: string;
+}
+
+export interface AdminPrescriptionDetailsProps {
   prescription: AdminPrescription;
   onStatusChange: (prescriptionId: string, newStatus: PrescriptionStatus) => void;
   onMedicationsChange: (prescriptionId: string, medications: Medication[]) => void;
-  onAmountChange: (prescriptionId: string, amount: number) => void;
+  onSaveMedications?: (prescriptionId: string) => void;
+  savingMedications?: boolean;
+  saveMedicinesError?: string | null;
+  onAmountChange: (prescriptionId: string, amount: number) => void | Promise<void>;
   onClose: () => void;
+  medicineOptions?: MedicineOption[];
 }
 
 const AdminPrescriptionDetails: React.FC<AdminPrescriptionDetailsProps> = ({
   prescription,
   onStatusChange,
   onMedicationsChange,
+  onSaveMedications,
+  savingMedications = false,
+  saveMedicinesError = null,
   onAmountChange,
-  onClose
+  onClose,
+  medicineOptions = [],
 }) => {
   const [localAmount, setLocalAmount] = useState<number | undefined>(prescription.amount);
+  const [editingAmount, setEditingAmount] = useState(false);
   const [viewingFile, setViewingFile] = useState<{ type: 'pdf' | 'image'; url: string } | null>(null);
   const statusConfig = getStatusConfig(prescription.status);
+
+  useEffect(() => {
+    setLocalAmount(prescription.amount);
+  }, [prescription.amount]);
 
   const handleApprove = () => {
     if (prescription.medications.length === 0) {
@@ -76,15 +95,14 @@ const AdminPrescriptionDetails: React.FC<AdminPrescriptionDetailsProps> = ({
     alert('✅ Medicine dispatched! Dispatch email sent to customer (placeholder).');
   };
 
-  const handleAmountSave = () => {
+  const handleAmountSave = async () => {
     if (!localAmount || localAmount <= 0) {
       alert('Please enter a valid amount');
       return;
     }
-    // TODO: API call to update amount
-    // await prescriptionService.updatePrescription(prescription.id, { amount: localAmount });
-    onAmountChange(prescription.id, localAmount);
-    alert('Amount updated successfully');
+    setEditingAmount(false);
+    await onAmountChange(prescription.id, localAmount);
+    alert('Amount saved. Prescription approved and email sent to customer.');
   };
 
   const formatDate = (dateString: string) => {
@@ -233,24 +251,32 @@ const AdminPrescriptionDetails: React.FC<AdminPrescriptionDetailsProps> = ({
 
           {/* Medications Section */}
           <section className="prescription-section">
+            {saveMedicinesError && (
+              <div className="save-medicines-error" role="alert">
+                {saveMedicinesError}
+              </div>
+            )}
             <MedicationEditor
               medications={prescription.medications}
               onMedicationsChange={(meds) => onMedicationsChange(prescription.id, meds)}
               editable={statusConfig.canAddMedications}
+              medicineOptions={medicineOptions}
+              onSaveMedications={onSaveMedications ? () => onSaveMedications(prescription.id) : undefined}
+              saving={savingMedications}
             />
           </section>
 
-          {/* Amount Section */}
+          {/* Amount Section - shows after Save medicine (backend returns amount); admin can Edit */}
           <section className="prescription-section">
             <h3 className="section-title">Amount</h3>
             <div className="section-content">
-              {statusConfig.canAddAmount ? (
+              {editingAmount ? (
                 <div className="amount-editor">
                   <div className="amount-input-group">
                     <label className="amount-label">Amount (₹):</label>
                     <input
                       type="number"
-                      value={localAmount || ''}
+                      value={localAmount ?? prescription.amount ?? ''}
                       onChange={(e) => setLocalAmount(Number(e.target.value))}
                       placeholder="Enter amount"
                       min="0"
@@ -265,17 +291,32 @@ const AdminPrescriptionDetails: React.FC<AdminPrescriptionDetailsProps> = ({
                     >
                       Save Amount
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingAmount(false)}
+                      className="btn-cancel-amount"
+                    >
+                      Cancel
+                    </button>
                   </div>
-                  {localAmount && localAmount > 0 && (
-                    <p className="amount-display">Current Amount: ₹{localAmount.toLocaleString('en-IN')}</p>
-                  )}
                 </div>
               ) : (
                 <div className="amount-display">
-                  {prescription.amount ? (
-                    <span className="amount-value">₹{prescription.amount.toLocaleString('en-IN')}</span>
+                  {prescription.amount != null && prescription.amount > 0 ? (
+                    <>
+                      <span className="amount-value">₹{prescription.amount.toLocaleString('en-IN')}</span>
+                      {statusConfig.canAddAmount && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingAmount(true)}
+                          className="btn-edit-amount"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </>
                   ) : (
-                    <span className="amount-missing">No amount set</span>
+                    <span className="amount-missing">Save medicines to see calculated amount</span>
                   )}
                 </div>
               )}

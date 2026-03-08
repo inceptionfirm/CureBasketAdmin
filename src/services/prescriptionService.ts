@@ -1,6 +1,19 @@
 import { apiClient } from './apiClient';
 import { fileUploadService } from './fileUploadService';
 
+/** Turn backend error (string, array of objects, or object) into a readable message. */
+function errorToMessage(val: unknown): string {
+  if (val == null) return 'Unknown error';
+  if (typeof val === 'string') return val;
+  if (Array.isArray(val)) {
+    return val
+      .map((e) => (typeof e === 'object' && e != null && 'message' in e ? String((e as any).message) : JSON.stringify(e)))
+      .join('; ');
+  }
+  if (typeof val === 'object' && 'message' in val) return String((val as any).message);
+  return JSON.stringify(val);
+}
+
 // Prescription API Types based on actual backend structure
 export interface PrescriptionMainAttribute {
   id?: number;
@@ -136,7 +149,7 @@ class PrescriptionService {
     const response = await apiClient.post<Prescription>(`${this.baseEndpoint}/update-prescription/${prescriptionId}`, updates);
 
     if (!response.success) {
-      throw new Error(response.error || response.message || 'Failed to update prescription');
+      throw new Error(errorToMessage(response.error ?? response.message) || 'Failed to update prescription');
     }
 
     return {
@@ -151,7 +164,7 @@ class PrescriptionService {
     const response = await apiClient.post<Prescription>(`${this.baseEndpoint}/get-prescription/${id}`);
 
     if (!response.success) {
-      throw new Error(response.error || 'Failed to fetch prescription');
+      throw new Error(errorToMessage(response.error) || 'Failed to fetch prescription');
     }
 
     return response.data as Prescription;
@@ -219,6 +232,39 @@ class PrescriptionService {
     return {
       success: true,
       message: response.message || 'Prescription deleted successfully',
+    };
+  }
+
+  /**
+   * Map medicines to a prescription (link catalog medicines to prescription lines).
+   * POST /prescriptions/map-medicine/{prescriptionId}
+   * Body: array of { serialId?, medicineId, dosage, frequency, quantity }
+   */
+  async mapMedicineInPrescription(
+    prescriptionId: number,
+    items: Array<{
+      serialId?: string;
+      medicineId: number;
+      dosage: string;
+      frequency: string;
+      quantity: string;
+    }>
+  ): Promise<{ success: boolean; message?: string; data?: any }> {
+    const id = Number(prescriptionId);
+    if (isNaN(id) || id <= 0) {
+      throw new Error(`Invalid prescription ID: ${prescriptionId}`);
+    }
+    const response = await apiClient.post<any>(
+      `${this.baseEndpoint}/map-medicine/${id}`,
+      items
+    );
+    if (!response.success) {
+      throw new Error(errorToMessage(response.error ?? response.message) || 'Failed to map medicines to prescription');
+    }
+    return {
+      success: true,
+      message: response.message || 'Medicines mapped successfully',
+      data: response.data,
     };
   }
 

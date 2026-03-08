@@ -83,40 +83,67 @@ class BlogService {
     active?: boolean;
     mainAttributes?: BlogMainAttribute[];
   }): Promise<{ success: boolean; message?: string; data?: Blog }> {
-    // Build payload with new structure
+    // Build payload - backend expects: itemType, category, content, excerpt, status, title, seoTitle, seoDescription
+    // Use fields directly from blogData if they exist, otherwise use fallbacks
     const payload: any = {
       itemType: blogData.itemType || 'BLOG',
-      position: blogData.position || '',
-      type: blogData.type || '',
       title: blogData.title || blogData.itemName || blogData.itemHeading || '',
-      description: blogData.description || blogData.content || blogData.itemDescription || '',
       status: blogData.status || (blogData.active ? 'ACTIVE' : 'DRAFT'),
-      priority: blogData.priority !== undefined ? blogData.priority : 0,
     };
-    
-    // Remove only null/undefined values, but keep empty strings for optional fields
-    // Required fields: itemType, status, title - always keep these
-    Object.keys(payload).forEach(key => {
-      // Always keep required fields
-      if (key === 'itemType' || key === 'status' || key === 'title') {
-        return;
-      }
-      // Remove null/undefined, but keep empty strings for optional fields
-      if (payload[key] === null || payload[key] === undefined) {
-        delete payload[key];
-      }
-    });
-    
+
+    // Add category if provided (preserve the field name)
+    if (blogData.category !== undefined && blogData.category !== null && blogData.category !== '') {
+      payload.category = blogData.category;
+    } else if (blogData.categoryId !== undefined && blogData.categoryId !== null && String(blogData.categoryId) !== '') {
+      payload.category = blogData.categoryId;
+    }
+
+    // Add content if provided (preserve the field name)
+    if (blogData.content !== undefined && blogData.content !== null && blogData.content !== '') {
+      payload.content = blogData.content;
+    } else if (blogData.itemDescription !== undefined && blogData.itemDescription !== null && blogData.itemDescription !== '') {
+      payload.content = blogData.itemDescription;
+    } else if (blogData.description !== undefined && blogData.description !== null && blogData.description !== '') {
+      payload.content = blogData.description;
+    }
+
+    // Add excerpt if provided
+    if (blogData.excerpt !== undefined && blogData.excerpt !== null && blogData.excerpt !== '') {
+      payload.excerpt = blogData.excerpt;
+    }
+
+    // Add SEO fields if provided
+    if (blogData.seoTitle !== undefined && blogData.seoTitle !== null && blogData.seoTitle !== '') {
+      payload.seoTitle = blogData.seoTitle;
+    }
+
+    if (blogData.seoDescription !== undefined && blogData.seoDescription !== null && blogData.seoDescription !== '') {
+      payload.seoDescription = blogData.seoDescription;
+    }
+
+    // Optional fields
+    if (blogData.position !== undefined && blogData.position !== null && blogData.position !== '') {
+      payload.position = blogData.position;
+    }
+
+    if (blogData.type !== undefined && blogData.type !== null && blogData.type !== '') {
+      payload.type = blogData.type;
+    }
+
+    if (blogData.priority !== undefined) {
+      payload.priority = blogData.priority;
+    }
+
     const endpoint = `${this.baseEndpoint}/add-blog`;
     console.log('📝 Create blog endpoint:', endpoint);
     console.log('📝 Create blog payload (raw):', payload);
     console.log('📝 Create blog payload (stringified):', JSON.stringify(payload, null, 2));
     console.log('📝 Payload keys:', Object.keys(payload));
     console.log('📝 Payload values:', Object.values(payload));
-    
+
     const response = await apiClient.post<Blog>(endpoint, payload);
     console.log('📝 Create blog response:', response);
-    
+
     if (!response.success) {
       console.error('❌ Blog creation failed:', {
         error: response.error,
@@ -133,10 +160,10 @@ class BlogService {
         data: response.data,
         fullResponse: response
       });
-      
+
       // Extract more detailed error message from various possible locations
       let errorDetails = 'Failed to create blog';
-      
+
       if (response.data) {
         if (typeof response.data === 'string') {
           errorDetails = response.data;
@@ -150,13 +177,13 @@ class BlogService {
           errorDetails = response.data.errorMessage;
         }
       }
-      
+
       if (response.error) {
         errorDetails = response.error;
       } else if (response.message) {
         errorDetails = response.message;
       }
-      
+
       // Create error object with full details
       const error = new Error(errorDetails);
       (error as any).response = response;
@@ -188,7 +215,7 @@ class BlogService {
   }): Promise<{ success: boolean; message?: string; data?: Blog }> {
     // Build update payload - only include fields that are being updated
     const updatePayload: any = {};
-    
+
     // Map legacy fields to new structure if needed
     if (updates.itemType !== undefined) updatePayload.itemType = updates.itemType;
     if (updates.category !== undefined) updatePayload.category = updates.category;
@@ -198,7 +225,31 @@ class BlogService {
     if (updates.excerpt !== undefined) updatePayload.excerpt = updates.excerpt;
     if (updates.seoTitle !== undefined) updatePayload.seoTitle = updates.seoTitle;
     if (updates.seoDescription !== undefined) updatePayload.seoDescription = updates.seoDescription;
-    
+
+    // CRITICAL: Always include enabled field to prevent it from being set to false
+    // If enabled is explicitly provided in updates, use it
+    // BUT: If status is PUBLISHED (either being set or already published), ALWAYS set enabled to true
+    // This fixes the issue where published blogs get disabled
+    if (updates.enabled !== undefined && updates.status !== 'PUBLISHED') {
+      // Only use provided enabled value if status is NOT being set to PUBLISHED
+      updatePayload.enabled = updates.enabled;
+    } else if (updates.status === 'PUBLISHED') {
+      // If status is being set to PUBLISHED, ALWAYS enable it
+      updatePayload.enabled = true;
+    } else if (updates.enabled !== undefined) {
+      // If enabled is provided and status is not PUBLISHED, use the provided value
+      updatePayload.enabled = updates.enabled;
+    } else {
+      // Default to true for all other cases
+      updatePayload.enabled = true;
+    }
+
+    console.log('📝 blogService.updateBlog - enabled logic:', {
+      'updates.enabled': updates.enabled,
+      'updates.status': updates.status,
+      'final updatePayload.enabled': updatePayload.enabled
+    });
+
     // Handle legacy field mappings
     if (updates.itemName !== undefined && !updatePayload.title) {
       updatePayload.title = updates.itemName;
@@ -209,12 +260,16 @@ class BlogService {
     if (updates.categoryId !== undefined && !updatePayload.category) {
       updatePayload.category = updates.categoryId.toString();
     }
-    
+
     // Remove id from payload (it's in the URL)
     delete updatePayload.id;
-    
-    // Remove null/undefined/empty values
+
+    // Remove null/undefined/empty values (but keep enabled field)
     Object.keys(updatePayload).forEach(key => {
+      if (key === 'enabled') {
+        // Always keep enabled field - don't delete it
+        return;
+      }
       if (updatePayload[key] === null || updatePayload[key] === undefined || updatePayload[key] === '') {
         delete updatePayload[key];
       }
@@ -223,14 +278,14 @@ class BlogService {
     const endpoint = `${this.baseEndpoint}/update-blog/${id}`;
     console.log('📝 Update blog endpoint:', endpoint);
     console.log('📝 Update blog payload:', JSON.stringify(updatePayload, null, 2));
-    
+
     const response = await apiClient.post<Blog>(endpoint, updatePayload);
     console.log('📝 Update blog response:', response);
 
     if (!response.success) {
       // Extract detailed error message
       let errorMessage = 'Failed to update blog';
-      
+
       if (response.error) {
         errorMessage = response.error;
       } else if (response.data) {
@@ -242,16 +297,16 @@ class BlogService {
           errorMessage = response.data.error;
         } else if (response.data.msg) {
           errorMessage = response.data.msg;
-  }
+        }
       }
-      
+
       console.error('❌ Failed to update blog:', {
         error: response.error,
         message: response.message,
         data: response.data,
         errorMessage
       });
-      
+
       throw new Error(errorMessage);
     }
 
@@ -283,9 +338,9 @@ class BlogService {
   // User didn't provide curl for this endpoint, trying /blog/get-all first
   async getAllBlogs(userType: string = 'ADMIN', params: BlogListParams = {}): Promise<BlogListResponse> {
     const queryParams: Record<string, any> = {};
-    
+
     if (params.itemType) queryParams.itemType = params.itemType;
-    
+
     // Backend requires status/type parameter - error says "Invalid 'Type': null"
     // Always include status if provided, and also try 'type' parameter
     if (params.status && params.status !== null && params.status !== undefined) {
@@ -297,7 +352,7 @@ class BlogService {
         queryParams.type = statusUpper;
       }
     }
-    
+
     // Also check if 'type' is provided separately
     if (params.type && params.type !== null && params.type !== undefined) {
       const typeUpper = String(params.type).toUpperCase();
@@ -306,18 +361,18 @@ class BlogService {
         // If status wasn't set, also set it
         if (!queryParams.status) {
           queryParams.status = typeUpper;
-  }
+        }
       }
     }
-    
+
     console.log('📝 BlogService queryParams before sending:', queryParams);
-    
+
     if (params.priority) queryParams.priority = params.priority;
     if (params.page !== undefined) queryParams.page = params.page;
     if (params.pageSize !== undefined) queryParams.pageSize = params.pageSize;
     if (params.sortBy) queryParams.sortBy = params.sortBy;
     if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
-    
+
     // Remove any null/undefined values to prevent sending them as query params
     Object.keys(queryParams).forEach(key => {
       if (queryParams[key] === null || queryParams[key] === undefined) {
@@ -329,7 +384,7 @@ class BlogService {
     const endpoint = `${this.baseEndpoint}/get-all`;
     console.log('📝 Fetching all blogs:', endpoint, 'with params:', queryParams);
     console.log('📝 Full URL will be:', endpoint);
-    
+
     // Try GET first, if it fails with 404, try POST method (like get-blog-by-id uses POST)
     let response;
     try {
@@ -343,7 +398,7 @@ class BlogService {
           totalPages: number;
         };
       }>(endpoint, queryParams);
-      
+
       // If GET fails, try POST (some endpoints use POST instead of GET)
       if (!response.success) {
         console.log('📝 GET failed, trying POST method...');
@@ -382,7 +437,7 @@ class BlogService {
     if (!response.success) {
       // Extract detailed error message
       let errorMessage = 'Failed to fetch blogs';
-      
+
       if (response.error) {
         errorMessage = response.error;
       } else if (response.data) {
@@ -394,25 +449,25 @@ class BlogService {
           errorMessage = response.data.error;
         } else if (response.data.msg) {
           errorMessage = response.data.msg;
-  }
+        }
       }
-      
+
       console.error('❌ Failed to fetch blogs:', {
         error: response.error,
         message: response.message,
         data: response.data,
         errorMessage
       });
-      
+
       throw new Error(errorMessage);
     }
 
     const data = response.data ?? {};
-    
+
     // Handle different response structures
     // Backend might return: { content: [...] } or { data: [...] } or just an array
     let content: Blog[] = [];
-    
+
     if (Array.isArray(data)) {
       content = data;
     } else if (Array.isArray(data.content)) {
@@ -422,7 +477,7 @@ class BlogService {
     } else if (Array.isArray(data.blogs)) {
       content = data.blogs;
     }
-    
+
     const pageInfo = data.pageInfo || data.pagination;
 
     return {

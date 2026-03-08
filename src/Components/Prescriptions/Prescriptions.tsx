@@ -4,6 +4,7 @@ import AdminPrescriptionDetails, { AdminPrescription } from './AdminPrescription
 import { PrescriptionStatus } from './prescriptionStatusConfig';
 import { Medication } from './MedicationEditor';
 import { prescriptionService, Prescription } from '../../services/prescriptionService';
+import { medicineService } from '../../services/modules/medicineService';
 import './Prescriptions.css';
 import '../../styles/global-buttons.css';
 
@@ -45,6 +46,9 @@ const Prescriptions: React.FC = () => {
     dispatched: 0
   });
 
+  // Medicines list for search/autocomplete (loaded once, stored in state)
+  const [medicinesForSearch, setMedicinesForSearch] = useState<Array<{ id: number; name: string; manufacturer?: string }>>([]);
+
   // Map API Prescription to AdminPrescription format
   const mapApiPrescriptionToAdmin = (apiPrescription: Prescription | any): AdminPrescription => {
     // Extract medications from mainAttributes
@@ -69,8 +73,8 @@ const Prescriptions: React.FC = () => {
             frequency,
             duration,
             quantity,
-            instructions
-          });
+            instructions,
+          } as Medication);
         }
       });
     }
@@ -100,17 +104,17 @@ const Prescriptions: React.FC = () => {
     }
 
     // Map status from API to AdminPrescription format
-    const statusMap: Record<string, PrescriptionStatus> = {
-      'PENDING': 'pending',
-      'APPROVED': 'approved',
-      'REJECTED': 'rejected',
-      'DISPENSED': 'dispatched',
-      'EXPIRED': 'expired',
-      'PAID': 'paid',
-      'VERIFIED': 'verified'
+    const statusMap: Record<string, string> = {
+      PENDING: 'pending',
+      APPROVED: 'approved',
+      REJECTED: 'pending',
+      DISPENSED: 'dispatched',
+      EXPIRED: 'expired',
+      PAID: 'paid',
+      VERIFIED: 'verified',
     };
     const apiStatus = (apiPrescription.status || 'PENDING').toUpperCase();
-    const mappedStatus = statusMap[apiStatus] || 'pending';
+    const mappedStatus = (statusMap[apiStatus] || 'pending') as PrescriptionStatus;
 
     // Extract patient info - API has patientName, might have patientId
     const patientName = apiPrescription.patientName || 'Unknown Patient';
@@ -190,6 +194,24 @@ const Prescriptions: React.FC = () => {
     loadPrescriptions();
   }, []);
 
+  // Load medicines for autocomplete (stored in state for search)
+  useEffect(() => {
+    const loadMedicines = async () => {
+      try {
+        const res = await medicineService.getAllMedicinesAllPages({ pageSize: 20 });
+        const list = (res.medicines || []).map((m: any) => ({
+          id: m.id ?? m.ID ?? m.medicineId ?? 0,
+          name: m.name || '',
+          manufacturer: m.manufacturer || undefined,
+        })).filter((m) => m.id && m.name);
+        setMedicinesForSearch(list);
+      } catch {
+        setMedicinesForSearch([]);
+      }
+    };
+    loadMedicines();
+  }, []);
+
   // Handle prescription selection
   const handlePrescriptionClick = (prescription: AdminPrescription) => {
     setSelectedPrescription(prescription);
@@ -199,14 +221,12 @@ const Prescriptions: React.FC = () => {
   const handleStatusChange = async (prescriptionId: string, newStatus: PrescriptionStatus) => {
     try {
       // Map AdminPrescription status to API status
-      const statusMap: Record<PrescriptionStatus, string> = {
-        'pending': 'PENDING',
-        'approved': 'APPROVED',
-        'rejected': 'REJECTED',
-        'dispatched': 'DISPENSED',
-        'expired': 'EXPIRED',
-        'paid': 'PAID',
-        'verified': 'VERIFIED'
+      const statusMap: Partial<Record<PrescriptionStatus, string>> = {
+        pending: 'PENDING',
+        approved: 'APPROVED',
+        dispatched: 'DISPENSED',
+        paid: 'PAID',
+        verified: 'VERIFIED',
       };
       const apiStatus = statusMap[newStatus] || 'PENDING';
       
@@ -236,64 +256,111 @@ const Prescriptions: React.FC = () => {
     }
   };
 
-  // Map medications to mainAttributes format for API
-  const mapMedicationsToMainAttributes = (medications: Medication[]) => {
-    return medications.map((med, index) => ({
-      name: `Medication ${index + 1}`,
-      scale: 'list',
-      value: med.name || '',
-      subAttributes: [
-        { name: 'Dosage', value: med.dosage || '' },
-        { name: 'Frequency', value: med.frequency || '' },
-        { name: 'Duration', value: med.duration || '' },
-        { name: 'Quantity', value: med.quantity || '' },
-        { name: 'Instructions', value: med.instructions || '' }
-      ].filter(sa => sa.value) // Only include non-empty subAttributes
-    }));
+  const buildMapMedicinePayload = (medications: Medication[]) => {
+    const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return medications
+      .filter((med): med is Medication & { medicineId: number } =>
+        typeof med.medicineId === 'number' && med.medicineId > 0
+      )
+      .map((med) => ({
+        ...(med.id && uuidLike.test(String(med.id)) && { serialId: med.id }),
+        medicineId: med.medicineId!,
+        dosage: med.dosage ?? '',
+        frequency: med.frequency ?? '',
+        quantity: String(med.quantity ?? '')
+      }));
   };
 
-  // Handle medications change
-  const handleMedicationsChange = async (prescriptionId: string, medications: Medication[]) => {
+  const [savingMedications, setSavingMedications] = useState(false);
+  const [saveMedicinesError, setSaveMedicinesError] = useState<string | null>(null);
+
+  const handleSaveMedications = async (prescriptionId: string) => {
+    const meds = selectedPrescription?.id === prescriptionId ? selectedPrescription.medications : prescriptions.find((p) => p.id === prescriptionId)?.medications;
+    if (!meds?.length) {
+      setSaveMedicinesError('Add at least one medication first.');
+      return;
+    }
+    const mapPayload = buildMapMedicinePayload(meds);
+    if (mapPayload.length === 0) {
+      setSaveMedicinesError('Select a medicine from the list for each row to save.');
+      return;
+    }
+    setSavingMedications(true);
+    setSaveMedicinesError(null);
     try {
-      // Map medications to mainAttributes format
-      const mainAttributes = mapMedicationsToMainAttributes(medications);
-      
-      // Update via API
-      await prescriptionService.updatePrescription(Number(prescriptionId), { 
-        mainAttributes 
-      });
-
-      // Update local state
-      setPrescriptions(prev =>
-        prev.map(p => (p.id === prescriptionId ? { ...p, medications } : p))
-      );
-
-      // Update selected prescription if it's the one being updated
+      const prescriptionIdNum = Number(prescriptionId);
+      // Single save request: map-medicine only (do not call update-prescription with mainAttributes).
+      const result = await prescriptionService.mapMedicineInPrescription(prescriptionIdNum, mapPayload);
+      // Use prescription from response if present, otherwise fetch once for amount.
+      let updated: Prescription | undefined = result?.data as Prescription | undefined;
+      const hasPrescription = updated && typeof updated === 'object' && 'id' in updated;
+      if (!hasPrescription) {
+        updated = await prescriptionService.getPrescriptionById(prescriptionIdNum);
+      }
+      const mapped = mapApiPrescriptionToAdmin(updated);
+      setPrescriptions(prev => prev.map(p => (p.id === prescriptionId ? mapped : p)));
       if (selectedPrescription?.id === prescriptionId) {
-        setSelectedPrescription(prev => prev ? { ...prev, medications } : null);
+        setSelectedPrescription(mapped);
       }
     } catch (err) {
-      console.error('❌ Error updating medications:', err);
-      alert('Failed to update medications. Please try again.');
+      let msg = err instanceof Error ? err.message : String(err);
+      if (typeof msg !== 'string' || msg.includes('[object Object]')) {
+        msg = (err as any)?.message ?? (err as any)?.error ?? 'Some error occurred.';
+        if (Array.isArray(msg)) {
+          msg = msg.map((e: any) => (e?.message ?? e)).join('; ');
+        } else if (typeof msg !== 'string') {
+          msg = 'Some error occurred.';
+        }
+      }
+      if (typeof msg === 'string' && (msg.includes('.java') || msg.includes(' at ') || msg.includes('lineNumber') || msg.length > 150)) {
+        msg = 'Some error occurred.';
+      }
+      setSaveMedicinesError(msg.trim() || 'Some error occurred.');
+      console.error('❌ Save medications error:', err);
+    } finally {
+      setSavingMedications(false);
     }
   };
 
-  // Handle amount change
-  const handleAmountChange = async (prescriptionId: string, amount: number) => {
-    try {
-      // Update via API
-      await prescriptionService.updatePrescription(Number(prescriptionId), { 
-        amount 
-      });
+  // Handle medications change: only update local state. No API call when adding/editing medicines in prescription details.
+  const handleMedicationsChange = (prescriptionId: string, medications: Medication[]) => {
+    const current = prescriptions.find((p) => p.id === prescriptionId);
+    const sameAsCurrent =
+      current &&
+      current.medications.length === medications.length &&
+      JSON.stringify(current.medications) === JSON.stringify(medications);
+    if (sameAsCurrent) return;
 
-      // Update local state
+    setPrescriptions(prev =>
+      prev.map(p => (p.id === prescriptionId ? { ...p, medications } : p))
+    );
+    if (selectedPrescription?.id === prescriptionId) {
+      setSelectedPrescription(prev => (prev ? { ...prev, medications } : null));
+    }
+  };
+
+  // Handle amount change (only call API when amount actually changed, not on view details).
+  // After saving amount, approve prescription so backend can send approve email to customer.
+  const handleAmountChange = async (prescriptionId: string, amount: number) => {
+    const current = prescriptions.find((p) => p.id === prescriptionId);
+    if (current && current.amount === amount) {
+      return;
+    }
+
+    try {
+      await prescriptionService.updatePrescription(Number(prescriptionId), { amount });
+
       setPrescriptions(prev =>
         prev.map(p => (p.id === prescriptionId ? { ...p, amount } : p))
       );
 
-      // Update selected prescription if it's the one being updated
       if (selectedPrescription?.id === prescriptionId) {
         setSelectedPrescription(prev => prev ? { ...prev, amount } : null);
+      }
+
+      // Approve prescription after saving amount so backend sends approve email to customer
+      if (current?.status === 'pending') {
+        await handleStatusChange(prescriptionId, 'approved');
       }
     } catch (err) {
       console.error('❌ Error updating amount:', err);
@@ -301,8 +368,8 @@ const Prescriptions: React.FC = () => {
     }
   };
 
-  // Close detail modal
   const handleCloseDetails = () => {
+    setSaveMedicinesError(null);
     setSelectedPrescription(null);
   };
 
@@ -383,9 +450,13 @@ const Prescriptions: React.FC = () => {
           prescription={selectedPrescription}
           onStatusChange={handleStatusChange}
           onMedicationsChange={handleMedicationsChange}
+          onSaveMedications={handleSaveMedications}
+          savingMedications={savingMedications}
+          saveMedicinesError={saveMedicinesError}
           onAmountChange={handleAmountChange}
           onClose={handleCloseDetails}
-      />
+          medicineOptions={medicinesForSearch}
+        />
       )}
     </div>
   );

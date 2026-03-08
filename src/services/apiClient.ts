@@ -282,8 +282,10 @@ class APIClient {
       
       // If backend returns success: false, treat it as an error even if HTTP status is 200
       if (!responseSuccess) {
-        // Extract error message from response body
-        const errorMessage = result?.message || result?.error || result?.msg || `Request failed: ${endpoint}`;
+        const raw = result?.message ?? result?.msg ?? result?.error ?? `Request failed: ${endpoint}`;
+        const errorMessage = typeof raw === 'string' ? raw
+          : Array.isArray(raw) ? raw.map((e: any) => e?.message ?? JSON.stringify(e)).join('; ')
+          : typeof raw === 'object' && raw != null && 'message' in raw ? String((raw as any).message) : JSON.stringify(raw);
         
         console.error('❌ API returned success: false:', {
           status: response.status,

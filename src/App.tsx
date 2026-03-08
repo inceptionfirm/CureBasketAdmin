@@ -12,6 +12,7 @@ import Dashboard from './Components/Dashboard/Dashboard';
 import Profile from './Components/Profile/Profile';
 import Settings from './Components/Settings/Settings';
 import BankContact from './Components/BankContact/BankContact';
+import OrderShippingConfig from './Components/OrderShippingConfig/OrderShippingConfig';
 import Dispense from './Components/Dispense/Dispense';
 import Users from './Components/Users/Users';
 import Categories from './Components/Categories/Categories';
@@ -19,6 +20,7 @@ import Blogs from './Components/Blogs/Blogs';
 import BannerManagement from './Components/BannerManagement/BannerManagement';
 import Prescriptions from './Components/Prescriptions/Prescriptions';
 import MedicinePage from './Components/Medicine/MedicinePage';
+import Cart from './Components/Cart/Cart';
 import Permissions from './Components/Permissions/Permissions';
 import PermissionGroups from './Components/PermissionGroups/PermissionGroups';
 import Roles from './Components/Roles/Roles';
@@ -108,12 +110,14 @@ function AdminLayout(): React.JSX.Element {
           <Route path="/banner-management" element={<BannerManagement />} />
           <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/medicine" element={<MedicinePage />} />
+          <Route path="/cart" element={<Cart />} />
           <Route path="/permissions" element={<Permissions />} />
           <Route path="/permission-groups" element={<PermissionGroups />} />
           <Route path="/roles" element={<Roles />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/bank-contact" element={<BankContact />} />
+          <Route path="/order-shipping-config" element={<OrderShippingConfig />} />
           <Route path="/dispense" element={<Dispense />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

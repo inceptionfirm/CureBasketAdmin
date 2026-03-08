@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { blogService } from '../../services/blogService';
+import { catalogService } from '../../services/catalogService';
 import AddBlogModal from './AddBlogModal';
 import './Blogs.css';
 import '../../styles/global-buttons.css';
@@ -25,6 +26,7 @@ interface Blog {
   };
   tags: string[];
   status: 'draft' | 'published' | 'archived';
+  enabled?: boolean; // Added to track enabled status
   publishedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -60,6 +62,30 @@ const Blogs: React.FC = () => {
     total: 0,
     totalPages: 1
   });
+
+  // Helper function to calculate stats from blogs array
+  const calculateStats = useCallback((blogsArray: Blog[]) => {
+    let publishedBlogs = 0;
+    let draftBlogs = 0;
+    let archivedBlogs = 0;
+
+    blogsArray.forEach((blog) => {
+      const status = blog.status?.toLowerCase() || '';
+      if (status === 'published') publishedBlogs++;
+      else if (status === 'draft') draftBlogs++;
+      else if (status === 'archived') archivedBlogs++;
+    });
+
+    const calculatedStats: BlogStats = {
+      totalBlogs: blogsArray.length,
+      publishedBlogs,
+      draftBlogs,
+      archivedBlogs
+    };
+
+    console.log('📝 Blog Stats Calculated:', calculatedStats);
+    setStats(calculatedStats);
+  }, []);
 
   // Helper function to map API blog to frontend format
   const mapApiBlogToFrontend = (apiBlog: any): Blog => {
@@ -128,21 +154,26 @@ const Blogs: React.FC = () => {
     } else if (apiBlog.files && Array.isArray(apiBlog.files) && apiBlog.files.length > 0) {
       // API returns files array with docPath field
       // Use the first file's docPath (API structure: files[0].docPath)
+      // Priority: docPath > fileUrl > url > file_path > path > documentUrl
       const firstFile = apiBlog.files[0];
       if (firstFile) {
         if (typeof firstFile === 'string') {
           // If file is a string, use it directly
           featuredImage = firstFile;
         } else if (firstFile.docPath) {
-          // API returns docPath field (e.g., "/files/CATALOG_ITEM/image.png")
+          // API returns docPath field (e.g., "/files/CATALOG_ITEM/image.png" or full URL)
           featuredImage = firstFile.docPath;
+          console.log('📝 Found image in files[0].docPath:', featuredImage);
         } else {
           // Fallback to other possible field names
-          featuredImage = firstFile.fileUrl || 
-                         firstFile.url || 
-                         firstFile.file_path || 
-                         firstFile.path || 
-                         firstFile.documentUrl || '';
+          featuredImage = firstFile.fileUrl ||
+            firstFile.url ||
+            firstFile.file_path ||
+            firstFile.path ||
+            firstFile.documentUrl || '';
+          if (featuredImage) {
+            console.log('📝 Found image in files[0] fallback field:', featuredImage);
+          }
         }
       }
     } else if (apiBlog.mainAttributes && Array.isArray(apiBlog.mainAttributes)) {
@@ -162,24 +193,29 @@ const Blogs: React.FC = () => {
 
     // Normalize image URL (add base URL if relative)
     // Images are served from https://java.api.curebasket.com (without /backend)
-    // Example: "/files/MEDICINE/image.png" -> "https://java.api.curebasket.com/files/MEDICINE/image.png"
+    // Example: "/files/CATALOG_ITEM/image.png" -> "https://java.api.curebasket.com/files/CATALOG_ITEM/image.png"
     const normalizeImageUrl = (imgUrl: string): string => {
-      if (!imgUrl || imgUrl.trim() === '') return '';
-      
+      if (!imgUrl || imgUrl.trim() === '') {
+        console.log('⚠️ Empty image URL, returning empty string');
+        return '';
+      }
+
       // If already a full URL, return as is
       if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://') || imgUrl.startsWith('data:')) {
+        console.log('✅ Image URL is already full URL:', imgUrl);
         return imgUrl;
       }
-      
+
       // Base URL for images (without /backend)
       const imageBaseURL = 'https://java.api.curebasket.com';
-      
+
       // If path starts with /, append directly, otherwise add /
-      if (imgUrl.startsWith('/')) {
-        return `${imageBaseURL}${imgUrl}`;
-      } else {
-        return `${imageBaseURL}/${imgUrl}`;
-      }
+      const normalized = imgUrl.startsWith('/')
+        ? `${imageBaseURL}${imgUrl}`
+        : `${imageBaseURL}/${imgUrl}`;
+
+      console.log('📝 Normalized image URL:', imgUrl, '->', normalized);
+      return normalized;
     };
 
     // Normalize the image URL to full URL
@@ -197,7 +233,7 @@ const Blogs: React.FC = () => {
     // Map content and excerpt - API returns these directly
     const content = apiBlog.content || apiBlog.itemDescription || '';
     const excerpt = apiBlog.excerpt || apiBlog.itemDescription || content.substring(0, 150) || '';
-    
+
     // Map category - API returns category as string
     const categoryName = apiBlog.category || apiBlog.categoryName || 'Uncategorized';
     const categoryId = String(apiBlog.categoryId || apiBlog.id || '');
@@ -223,6 +259,7 @@ const Blogs: React.FC = () => {
       },
       tags: Array.isArray(apiBlog.tags) ? apiBlog.tags : (apiBlog.tags ? [apiBlog.tags] : []),
       status: status,
+      enabled: apiBlog.enabled !== undefined ? apiBlog.enabled : true, // Default to true if not specified
       publishedAt: apiBlog.publishDate || apiBlog.publishedAt,
       createdAt: apiBlog.createdAt || apiBlog.createdDate || new Date().toISOString(),
       updatedAt: apiBlog.updatedAt || apiBlog.updatedDate || apiBlog.createdAt || new Date().toISOString(),
@@ -271,7 +308,14 @@ const Blogs: React.FC = () => {
           const publishedParams = { ...params, status: 'PUBLISHED', type: 'PUBLISHED' };
           const publishedResponse = await blogService.getAllBlogs('ADMIN', publishedParams);
           if (publishedResponse.blogs) {
-            allBlogs.push(...publishedResponse.blogs.map(mapApiBlogToFrontend));
+            const publishedBlogs = publishedResponse.blogs.map(mapApiBlogToFrontend);
+            allBlogs.push(...publishedBlogs);
+
+            // Log warning if some published blogs are missing (enabled: false)
+            if (publishedResponse.pagination && publishedResponse.pagination.total > publishedBlogs.length) {
+              const missingCount = publishedResponse.pagination.total - publishedBlogs.length;
+              console.warn(`⚠️ Warning: ${missingCount} published blog(s) are disabled (enabled: false) and will NOT appear on the website. Total published: ${publishedResponse.pagination.total}, Returned: ${publishedBlogs.length}`);
+            }
           }
 
           // Fetch ARCHIVED blogs
@@ -298,6 +342,10 @@ const Blogs: React.FC = () => {
             setBlogs([]);
           }
           setLoading(false);
+
+          // Calculate stats from the loaded blogs (no need to fetch again)
+          calculateStats(allBlogs);
+
           return; // Exit early since we've handled the "all statuses" case
         } catch (err) {
           console.error('❌ Error fetching all statuses:', err);
@@ -347,6 +395,9 @@ const Blogs: React.FC = () => {
       console.log('📝 Mapped blogs count:', mappedBlogs.length);
       console.log('📝 Sample mapped blog:', mappedBlogs[0]);
       setBlogs(mappedBlogs);
+
+      // Calculate stats from loaded blogs
+      calculateStats(mappedBlogs);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load blogs');
     } finally {
@@ -354,78 +405,16 @@ const Blogs: React.FC = () => {
     }
   }, []); // Only load once on mount - filtering is done client-side
 
-  const loadStats = useCallback(async () => {
-    try {
-      // Fetch blogs from all statuses to calculate stats dynamically
-      const allBlogs: Blog[] = [];
-
-      try {
-        // Fetch DRAFT blogs
-        const draftParams = { itemType: 'BLOG', page: 0, pageSize: 1000, status: 'DRAFT', type: 'DRAFT', sortBy: 'ID', sortOrder: 'DESC' };
-        const draftResponse = await blogService.getAllBlogs('ADMIN', draftParams);
-        if (draftResponse.blogs) {
-          allBlogs.push(...draftResponse.blogs.map(mapApiBlogToFrontend));
-        }
-
-        // Fetch PUBLISHED blogs
-        const publishedParams = { itemType: 'BLOG', page: 0, pageSize: 1000, status: 'PUBLISHED', type: 'PUBLISHED', sortBy: 'ID', sortOrder: 'DESC' };
-        const publishedResponse = await blogService.getAllBlogs('ADMIN', publishedParams);
-        if (publishedResponse.blogs) {
-          allBlogs.push(...publishedResponse.blogs.map(mapApiBlogToFrontend));
-        }
-
-        // Fetch ARCHIVED blogs
-        const archivedParams = { itemType: 'BLOG', page: 0, pageSize: 1000, status: 'ARCHIVED', type: 'ARCHIVED', sortBy: 'ID', sortOrder: 'DESC' };
-        const archivedResponse = await blogService.getAllBlogs('ADMIN', archivedParams);
-        if (archivedResponse.blogs) {
-          allBlogs.push(...archivedResponse.blogs.map(mapApiBlogToFrontend));
-        }
-      } catch (fetchError) {
-        console.error('Error fetching blogs for stats:', fetchError);
-      }
-
-      // Calculate stats from fetched blogs
-      let publishedBlogs = 0;
-      let draftBlogs = 0;
-      let archivedBlogs = 0;
-      allBlogs.forEach((blog) => {
-        const status = blog.status?.toLowerCase() || '';
-        if (status === 'published') publishedBlogs++;
-        else if (status === 'draft') draftBlogs++;
-        else if (status === 'archived') archivedBlogs++;
-      });
-
-      const calculatedStats: BlogStats = {
-        totalBlogs: allBlogs.length,
-        publishedBlogs,
-        draftBlogs,
-        archivedBlogs
-      };
-
-      console.log('📝 Blog Stats Calculated:', calculatedStats);
-      setStats(calculatedStats);
-    } catch (err) {
-      console.error('Failed to load blog stats:', err);
-      // Set default values on error
-      setStats({
-        totalBlogs: 0,
-        publishedBlogs: 0,
-        draftBlogs: 0,
-        archivedBlogs: 0
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // mapApiBlogToFrontend is stable, no need to include in deps
+  // Removed loadStats function - stats are now calculated directly from loaded blogs
+  // This eliminates duplicate API calls
 
   useEffect(() => {
     loadBlogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Load blogs only once on mount
+  }, []); // Load blogs only once on mount - stats will be calculated from loaded blogs
 
-  useEffect(() => {
-    loadStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Load stats only once on mount
+  // Remove separate loadStats call on mount - stats are now calculated from loaded blogs
+  // loadStats will only be called when explicitly needed (e.g., after operations)
 
   const handleAddBlog = async (blogData: any): Promise<number | null> => {
     try {
@@ -457,6 +446,44 @@ const Blogs: React.FC = () => {
         if (blogData.seoTitle !== undefined) updatePayload.seoTitle = blogData.seoTitle;
         if (blogData.seoDescription !== undefined) updatePayload.seoDescription = blogData.seoDescription;
 
+        // CRITICAL: Always set enabled to true when updating, especially for published blogs
+        // Check both the NEW status (if being changed) and the CURRENT status (from editingBlog)
+        // Handle both lowercase and uppercase status values
+        const currentStatusRaw = editingBlog.status || '';
+        const currentStatus = String(currentStatusRaw).toUpperCase();
+        const newStatus = status || currentStatus;
+        const isPublished = newStatus === 'PUBLISHED' || currentStatus === 'PUBLISHED';
+
+        console.log('📝 Blog update - Status check:', {
+          editingBlogId: editingBlog.id,
+          currentStatusRaw,
+          currentStatus,
+          newStatus,
+          status,
+          isPublished,
+          currentEnabled: (editingBlog as any).enabled,
+          editingBlogFull: editingBlog
+        });
+
+        // ALWAYS include enabled field for published blogs - even if no other fields are being updated
+        // This ensures published blogs stay enabled
+        if (isPublished) {
+          updatePayload.enabled = true;
+          console.log('📝 Blog is PUBLISHED - FORCING enabled: true');
+        } else {
+          // For DRAFT/ARCHIVED, preserve existing enabled status or default to true
+          const currentEnabled = (editingBlog as any).enabled;
+          updatePayload.enabled = currentEnabled !== undefined ? currentEnabled : true;
+          console.log('📝 Blog is not PUBLISHED - setting enabled:', updatePayload.enabled);
+        }
+
+        // IMPORTANT: If blog is published but enabled is false, ALWAYS send enabled: true
+        // This fixes existing disabled published blogs
+        if (currentStatus === 'PUBLISHED' && (editingBlog as any).enabled === false) {
+          updatePayload.enabled = true;
+          console.log('📝 FIXING: Published blog with enabled=false - forcing enabled: true');
+        }
+
         // Handle legacy field mappings for update
         if (blogData.itemName !== undefined && !updatePayload.title) {
           updatePayload.title = blogData.itemName;
@@ -468,19 +495,58 @@ const Blogs: React.FC = () => {
           updatePayload.category = blogData.categoryId.toString();
         }
 
-        // Remove empty/null values
+        // Remove empty/null values (but keep enabled field even if it's false)
         Object.keys(updatePayload).forEach(key => {
+          if (key === 'enabled') {
+            // Always keep enabled field - don't delete it
+            return;
+          }
           if (updatePayload[key] === null || updatePayload[key] === undefined || updatePayload[key] === '') {
             delete updatePayload[key];
           }
         });
 
+        // IMPORTANT: Even if no other fields are being updated, if blog is published and disabled,
+        // we MUST send enabled: true to fix it
         if (Object.keys(updatePayload).length === 0) {
-          throw new Error('No fields to update');
+          // Check if we need to fix enabled status
+          const currentStatusRaw = editingBlog.status || '';
+          const currentStatus = String(currentStatusRaw).toUpperCase();
+          if (currentStatus === 'PUBLISHED' && (editingBlog as any).enabled === false) {
+            updatePayload.enabled = true;
+            console.log('📝 No other fields to update, but fixing enabled status for published blog');
+          } else {
+            throw new Error('No fields to update');
+          }
         }
 
         const blogId = typeof editingBlog.id === 'string' ? Number(editingBlog.id) : editingBlog.id;
-        await blogService.updateBlog(blogId, updatePayload);
+
+        // Log the final payload before sending
+        console.log('📝 Blogs.tsx - Final update payload before sending:', JSON.stringify(updatePayload, null, 2));
+        console.log('📝 Blogs.tsx - Payload includes enabled?', 'enabled' in updatePayload, 'Value:', updatePayload.enabled);
+        console.log('📝 Blogs.tsx - Updating blog ID:', blogId);
+
+        const updateResult = await blogService.updateBlog(blogId, updatePayload);
+        console.log('📝 Blogs.tsx - Update result:', updateResult);
+
+        // WORKAROUND: If status is PUBLISHED, make a separate API call to enable the blog
+        // The backend might not accept enabled field in update endpoint, so we use catalog service
+        if (isPublished) {
+          try {
+            console.log('📝 Blogs.tsx - Enabling blog via catalog service (workaround for backend issue)...');
+            await catalogService.enableCatalogItem(blogId);
+            console.log('✅ Blogs.tsx - Blog enabled successfully via catalog service');
+          } catch (enableError) {
+            console.warn('⚠️ Blogs.tsx - Failed to enable blog via catalog service:', enableError);
+            // Don't throw error - the update might have succeeded even if enable failed
+            // This is a workaround, so we don't want to block the update
+          }
+        }
+
+        // Reload blogs immediately after update to reflect changes
+        await loadBlogs();
+
         return blogId;
       } else {
         // For create: send all required fields matching curl structure exactly
@@ -576,7 +642,7 @@ const Blogs: React.FC = () => {
 
       // Reload blogs list after successful image upload
       await loadBlogs();
-      await loadStats();
+      // Stats are calculated in loadBlogs, no need to call loadStats separately
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to upload image';
       console.error('❌ Error uploading image:', err);
@@ -597,7 +663,7 @@ const Blogs: React.FC = () => {
         const blogId = typeof id === 'string' ? Number(id) : id;
         await blogService.deleteBlog(blogId);
         await loadBlogs();
-        await loadStats();
+        // Stats are calculated in loadBlogs, no need to call loadStats separately
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to delete blog';
         console.error('❌ Error deleting blog:', err);
@@ -611,7 +677,7 @@ const Blogs: React.FC = () => {
       // Mock implementation - replace with actual API call later
       console.log('Publishing blog:', id);
       await loadBlogs();
-      await loadStats();
+      // Stats are calculated in loadBlogs, no need to call loadStats separately
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to publish blog');
     }
@@ -651,15 +717,15 @@ const Blogs: React.FC = () => {
 
   const filteredBlogs = blogs.filter(blog => {
     if (!blog || !blog.title) return false;
-    
+
     const matchesSearch = !searchTerm ||
       (blog.title && blog.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (blog.excerpt && blog.excerpt.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+
     // Map frontend status to match API status format
     let blogStatus = blog.status?.toLowerCase() || '';
     let filterStatus = statusFilter?.toLowerCase() || '';
-    
+
     const matchesStatus = !statusFilter || blogStatus === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -750,11 +816,11 @@ const Blogs: React.FC = () => {
       </div>
 
       {error && (
-        <div className="error-state" style={{ 
-          padding: '1rem', 
-          margin: '1rem', 
-          background: '#fee', 
-          color: '#c33', 
+        <div className="error-state" style={{
+          padding: '1rem',
+          margin: '1rem',
+          background: '#fee',
+          color: '#c33',
           borderRadius: '8px',
           border: '1px solid #fcc'
         }}>
@@ -829,29 +895,58 @@ const Blogs: React.FC = () => {
               {paginatedBlogs.map((blog) => (
                 <div key={blog.id} className="blog-item">
                   <div className="blog-image">
-                    {blog.featuredImage ? (
-                      <img 
-                        src={blog.featuredImage} 
+                    {blog.featuredImage && blog.featuredImage.trim() !== '' ? (
+                      <img
+                        src={blog.featuredImage}
                         alt={blog.title}
+                        style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
                         onError={(e) => {
-                          console.error('❌ Image failed to load:', blog.featuredImage);
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          console.error('❌ Image failed to load:', blog.featuredImage, 'for blog:', blog.title);
+                          const target = e.currentTarget;
+                          target.style.display = 'none';
+                          // Show placeholder if image fails
+                          const placeholder = target.parentElement?.querySelector('.blog-image-placeholder') as HTMLElement;
+                          if (placeholder) {
+                            placeholder.style.display = 'flex';
+                          }
                         }}
-                        onLoad={() => {
-                          console.log('✅ Image loaded successfully:', blog.featuredImage);
+                        onLoad={(e) => {
+                          console.log('✅ Image loaded successfully:', blog.featuredImage, 'for blog:', blog.title);
+                          // Hide placeholder when image loads
+                          const placeholder = e.currentTarget.parentElement?.querySelector('.blog-image-placeholder') as HTMLElement;
+                          if (placeholder) {
+                            placeholder.style.display = 'none';
+                          }
                         }}
                       />
                     ) : null}
-                    {!blog.featuredImage && (
-                      <div className="blog-image-placeholder">📝</div>
-                    )}
+                    <div className="blog-image-placeholder" style={{ display: blog.featuredImage && blog.featuredImage.trim() !== '' ? 'none' : 'flex' }}>📝</div>
                   </div>
 
                   <div className="blog-content">
                     <div className="blog-header">
                       <h3 className="blog-title">{blog.title}</h3>
-                      {getStatusBadge(blog.status)}
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {getStatusBadge(blog.status)}
+                        {blog.status === 'published' && blog.enabled === false && (
+                          <span
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              fontWeight: '500',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
+                              background: '#fee',
+                              color: '#c33',
+                              border: '1px solid #fcc'
+                            }}
+                            title="This blog is published but disabled. It will NOT appear on the website."
+                          >
+                            ⚠️ Disabled
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <p className="blog-excerpt">{blog.excerpt}</p>
@@ -904,7 +999,7 @@ const Blogs: React.FC = () => {
           setIsAddBlogModalOpen(false);
           setEditingBlog(null);
           await loadBlogs();
-          await loadStats();
+          // Stats are calculated in loadBlogs, no need to call loadStats separately
         }}
         onSubmit={handleAddBlog}
         onImageUpload={handleImageUpload}

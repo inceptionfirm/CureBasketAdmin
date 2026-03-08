@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Medicine } from '../../services/modules/medicineService';
+import { Medicine, medicineService } from '../../services/modules/medicineService';
+import { categoryService, Category } from '../../services/categoryService';
 import './AddMedicineModal.css';
 
 interface AddMedicineModalProps {
@@ -8,6 +9,33 @@ interface AddMedicineModalProps {
   onSubmit: (medicineData: MedicineFormData) => Promise<number | null>; // Returns medicine ID
   onImageUpload?: (medicineId: number, file: File) => Promise<void>; // Separate image upload
   editingMedicine?: Medicine | null;
+}
+
+interface FAQ {
+  question: string;
+  answer: string;
+  serialId?: string;
+}
+
+interface MedicinePackage {
+  size?: string;
+  quantity?: string;
+  label?: string;
+  unit?: string;
+  totalPrice?: number;
+  price?: number;
+  pricePerTablet?: number;
+  pricePerUnit?: number;
+  originalPrice?: number;
+  oldPrice?: number;
+}
+
+interface MedicineDosage {
+  strength?: string;
+  value?: string;
+  label?: string;
+  packages?: MedicinePackage[];
+  sizes?: MedicinePackage[];
 }
 
 interface MedicineFormData {
@@ -24,6 +52,23 @@ interface MedicineFormData {
   image: string;
   barcode?: string;
   countryOfOrigin?: string;
+  
+  // Listing/Card fields
+  type?: 'prescription' | 'otc' | 'supplement' | 'equipment';
+  // Product info fields (backend keys: genericName, strength, medicineSalt)
+  genericName?: string;
+  strength?: string;
+  salt?: string;
+  expiryDate?: string;
+  
+  // Extra sections
+  precautions?: string;
+  sideEffects?: string;
+  howToUse?: string;
+  faqs?: FAQ[];
+  
+  // Dosages & Packages
+  availableDosages?: MedicineDosage[];
 }
 
 const AddMedicineModal: React.FC<AddMedicineModalProps> = ({ 
@@ -45,8 +90,20 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
     status: 'active',
     prescriptionRequired: false,
     image: '',
-    countryOfOrigin: ''
+    countryOfOrigin: '',
+    type: 'otc',
+    genericName: '',
+    strength: '',
+    salt: '',
+    expiryDate: '',
+    precautions: '',
+    sideEffects: '',
+    howToUse: '',
+    faqs: [],
+    availableDosages: []
   });
+  
+  const [faqs, setFaqs] = useState<FAQ[]>([{ question: '', answer: '' }]);
 
   const [errors, setErrors] = useState<Partial<MedicineFormData>>({});
   const [isSavingMedicine, setIsSavingMedicine] = useState(false);
@@ -56,16 +113,60 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
   const [imagePreview, setImagePreview] = useState<string>('');
   const [savedMedicineId, setSavedMedicineId] = useState<number | null>(null);
   const [medicineSaved, setMedicineSaved] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [medicineForms, setMedicineForms] = useState<string[]>([]);
+  const [loadingMedicineForms, setLoadingMedicineForms] = useState(false);
 
-  // Simplified categories and forms
-  const categories = [
-    'Antibiotics', 'Pain Relief', 'Vitamins', 'Cold & Flu', 'Digestive',
-    'Heart Health', 'Diabetes', 'Skin Care', 'Eye Care', 'Other'
-  ];
+  // Fetch categories from API
+  useEffect(() => {
+    const loadCategories = async () => {
+      if (!isOpen) return; // Only fetch when modal is open
+      
+      try {
+        setLoadingCategories(true);
+        const response = await categoryService.getCategories({
+          page: 0,
+          pageSize: 100,
+          filters: {
+            status: 'active' // Only fetch active categories
+          }
+        });
+        
+        console.log('💉 AddMedicineModal: Fetched categories:', response.categories);
+        setCategories(response.categories || []);
+      } catch (error) {
+        console.error('❌ AddMedicineModal: Failed to load categories:', error);
+        // Fallback to empty array if API fails
+        setCategories([]);
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
 
-  const forms = [
-    'Tablet', 'Capsule', 'Syrup', 'Injection', 'Cream', 'Drops', 'Other'
-  ];
+    if (isOpen) {
+      loadCategories();
+    }
+  }, [isOpen]);
+
+  // Fetch medicine forms from API (matches backend MedicineDTO.medicineForm)
+  useEffect(() => {
+    const loadMedicineForms = async () => {
+      if (!isOpen) return;
+      try {
+        setLoadingMedicineForms(true);
+        const forms = await medicineService.getAllMedicineForms();
+        setMedicineForms(forms || []);
+      } catch (error) {
+        console.error('❌ AddMedicineModal: Failed to load medicine forms:', error);
+        // Fallback to common forms if API not live
+        setMedicineForms(['Tablet', 'Capsule', 'Syrup', 'Injection', 'Cream', 'Drops', 'Other']);
+      } finally {
+        setLoadingMedicineForms(false);
+      }
+    };
+    if (isOpen) loadMedicineForms();
+  }, [isOpen]);
 
   useEffect(() => {
     // Clear errors when modal opens or editingMedicine changes
@@ -107,14 +208,36 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
         category: editingMedicine.category || '',
         manufacturer: editingMedicine.manufacturer || '',
         form: formValue,
-        price: editingMedicine.price || 0,
-        stock: (editingMedicine as any).stock || 0,
+        price: Number(editingMedicine.price) || Number((editingMedicine as any).price) || 0,
+        stock: Number((editingMedicine as any).stock) ?? Number(editingMedicine.stockQuantity) ?? 0,
         sku: editingMedicine.sku || '',
+        barcode: (editingMedicine as any).barcode ?? '',
         status: (editingMedicine.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive',
         prescriptionRequired: editingMedicine.prescriptionRequired || false,
         image: editingMedicine.image || '',
-        countryOfOrigin: countryOfOriginValue
+        countryOfOrigin: countryOfOriginValue,
+        type: (editingMedicine as any).type || 'otc',
+        genericName: editingMedicine.genericName || '',
+        strength: editingMedicine.strength || '',
+        salt: (editingMedicine as any).medicineSalt ?? (editingMedicine as any).salt ?? '',
+        expiryDate: editingMedicine.expiryDate || '',
+        precautions: (editingMedicine as any).precautions || '',
+        sideEffects: (editingMedicine as any).sideEffects || '',
+        howToUse: (editingMedicine as any).howToUse || (editingMedicine as any).dosage || (editingMedicine as any).usage || '',
+        faqs: (editingMedicine as any).faqs || [],
+        availableDosages: (editingMedicine as any).availableDosages || (editingMedicine as any).dosages || (editingMedicine as any).packages || []
       });
+      
+      // Set FAQs state
+      if ((editingMedicine as any).faqs && Array.isArray((editingMedicine as any).faqs) && (editingMedicine as any).faqs.length > 0) {
+        setFaqs((editingMedicine as any).faqs.map((faq: any) => ({
+          question: faq.question || faq.q || '',
+          answer: faq.answer || faq.a || '',
+          serialId: faq.serialId
+        })));
+      } else {
+        setFaqs([{ question: '', answer: '' }]);
+      }
       
       console.log('💉 AddMedicineModal: Form data set:', {
         category: editingMedicine.category || '',
@@ -135,8 +258,19 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
         status: 'active',
         prescriptionRequired: false,
         image: '',
-        countryOfOrigin: ''
+        countryOfOrigin: '',
+        type: 'otc',
+        genericName: '',
+        strength: '',
+        salt: '',
+        expiryDate: '',
+        precautions: '',
+        sideEffects: '',
+        howToUse: '',
+        faqs: [],
+        availableDosages: []
       });
+      setFaqs([{ question: '', answer: '' }]);
     }
   }, [editingMedicine, isOpen]);
 
@@ -224,9 +358,15 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
     setIsSavingMedicine(true);
     
     try {
-      console.log('💉 Saving medicine:', formData);
+      // Prepare form data with FAQs
+      const formDataWithFaqs = {
+        ...formData,
+        faqs: faqs.filter(faq => faq.question.trim() !== '' && faq.answer.trim() !== '')
+      };
+      
+      console.log('💉 Saving medicine:', formDataWithFaqs);
       // Save medicine first (without image)
-      const medicineId = await onSubmit(formData);
+      const medicineId = await onSubmit(formDataWithFaqs);
       
       if (medicineId) {
         setSavedMedicineId(medicineId);
@@ -288,8 +428,19 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
       status: 'active',
       prescriptionRequired: false,
       image: '',
-      countryOfOrigin: ''
+      countryOfOrigin: '',
+      type: 'otc',
+      genericName: '',
+      strength: '',
+      salt: '',
+      expiryDate: '',
+      precautions: '',
+      sideEffects: '',
+      howToUse: '',
+      faqs: [],
+      availableDosages: []
     });
+    setFaqs([{ question: '', answer: '' }]);
     setErrors({});
     setSelectedFile(null);
     setImagePreview('');
@@ -378,10 +529,13 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
                     value={formData.category}
                     onChange={handleInputChange}
                     className={`form-select ${errors.category ? 'error' : ''}`}
+                    disabled={loadingCategories}
                   >
-                    <option value="">Select Category</option>
+                    <option value="">
+                      {loadingCategories ? 'Loading categories...' : 'Select Category'}
+                    </option>
                     {categories.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
+                      <option key={cat.id} value={cat.name}>{cat.name}</option>
                     ))}
                   </select>
                   {errors.category && <span className="error-message">{errors.category}</span>}
@@ -428,9 +582,10 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
                     value={formData.form}
                     onChange={handleInputChange}
                     className={`form-select ${errors.form ? 'error' : ''}`}
+                    disabled={loadingMedicineForms}
                   >
-                    <option value="">Select Form</option>
-                    {forms.map((form) => (
+                    <option value="">{loadingMedicineForms ? 'Loading forms...' : 'Select Form'}</option>
+                    {medicineForms.map((form) => (
                       <option key={form} value={form}>{form}</option>
                     ))}
                   </select>
@@ -453,6 +608,105 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="type" className="form-label">
+                    Type
+                  </label>
+                  <select
+                    id="type"
+                    name="type"
+                    value={formData.type || 'otc'}
+                    onChange={handleInputChange}
+                    className="form-select"
+                  >
+                    <option value="prescription">Prescription</option>
+                    <option value="otc">OTC (Over the Counter)</option>
+                    <option value="supplement">Supplement</option>
+                    <option value="equipment">Equipment</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="barcode" className="form-label">
+                    Barcode
+                  </label>
+                  <input
+                    type="text"
+                    id="barcode"
+                    name="barcode"
+                    value={formData.barcode || ''}
+                    onChange={handleInputChange}
+                    className="form-input"
+                    placeholder="Enter barcode"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="expiryDate" className="form-label">
+                    Expiry Date
+                  </label>
+                  <input
+                    type="date"
+                    id="expiryDate"
+                    name="expiryDate"
+                    value={formData.expiryDate || ''}
+                    onChange={handleInputChange}
+                    className="form-input"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="medicine-form-section">
+              <h3 className="section-title">
+                <span className="section-icon">🔬</span>
+                Product Details
+              </h3>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="genericName" className="form-label">
+                    Generic Name
+                  </label>
+                  <input
+                    type="text"
+                    id="genericName"
+                    name="genericName"
+                    value={formData.genericName || ''}
+                    onChange={handleInputChange}
+                    className="form-input"
+                    placeholder="Enter generic name"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="strength" className="form-label">
+                    Strength
+                  </label>
+                  <input
+                    type="text"
+                    id="strength"
+                    name="strength"
+                    value={formData.strength || ''}
+                    onChange={handleInputChange}
+                    className="form-input"
+                    placeholder="e.g., 500mg"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="salt" className="form-label">
+                    Salt / Composition
+                  </label>
+                  <input
+                    type="text"
+                    id="salt"
+                    name="salt"
+                    value={formData.salt || ''}
+                    onChange={handleInputChange}
+                    className="form-input"
+                    placeholder="e.g., Paracetamol, Cetirizine"
+                  />
                 </div>
               </div>
             </div>
@@ -481,6 +735,9 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
                   />
                   {errors.price && <span className="error-message">{errors.price}</span>}
                 </div>
+              </div>
+
+              <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="stock" className="form-label">
                     Stock Quantity
@@ -581,6 +838,136 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
                   <span className="checkbox-text">Prescription Required</span>
                 </label>
               </div>
+            </div>
+
+            <div className="medicine-form-section">
+              <h3 className="section-title">
+                <span className="section-icon">⚠️</span>
+                Medical Information
+              </h3>
+              
+              <div className="form-group">
+                <label htmlFor="precautions" className="form-label">
+                  Precautions
+                </label>
+                <textarea
+                  id="precautions"
+                  name="precautions"
+                  value={formData.precautions || ''}
+                  onChange={handleInputChange}
+                  className="form-textarea"
+                  placeholder="Enter precautions"
+                  rows={3}
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="sideEffects" className="form-label">
+                  Side Effects
+                </label>
+                <textarea
+                  id="sideEffects"
+                  name="sideEffects"
+                  value={formData.sideEffects || ''}
+                  onChange={handleInputChange}
+                  className="form-textarea"
+                  placeholder="Enter side effects"
+                  rows={3}
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="howToUse" className="form-label">
+                  How to Use / Dosage
+                </label>
+                <textarea
+                  id="howToUse"
+                  name="howToUse"
+                  value={formData.howToUse || ''}
+                  onChange={handleInputChange}
+                  className="form-textarea"
+                  placeholder="Enter usage instructions"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="medicine-form-section">
+              <h3 className="section-title">
+                <span className="section-icon">❓</span>
+                FAQs
+              </h3>
+              
+              {faqs.map((faq, index) => (
+                <div key={index} style={{ marginBottom: '1rem', padding: '1rem', border: '1px solid #e0e0e0', borderRadius: '8px' }}>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Question {index + 1}</label>
+                      <input
+                        type="text"
+                        value={faq.question}
+                        onChange={(e) => {
+                          const newFaqs = [...faqs];
+                          newFaqs[index].question = e.target.value;
+                          setFaqs(newFaqs);
+                        }}
+                        className="form-input"
+                        placeholder="Enter question"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Answer {index + 1}</label>
+                      <input
+                        type="text"
+                        value={faq.answer}
+                        onChange={(e) => {
+                          const newFaqs = [...faqs];
+                          newFaqs[index].answer = e.target.value;
+                          setFaqs(newFaqs);
+                        }}
+                        className="form-input"
+                        placeholder="Enter answer"
+                      />
+                    </div>
+                    {faqs.length > 1 && (
+                      <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newFaqs = faqs.filter((_, i) => i !== index);
+                            setFaqs(newFaqs);
+                          }}
+                          style={{
+                            padding: '0.5rem 1rem',
+                            background: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              
+              <button
+                type="button"
+                onClick={() => setFaqs([...faqs, { question: '', answer: '' }])}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                + Add FAQ
+              </button>
             </div>
           </div>
 

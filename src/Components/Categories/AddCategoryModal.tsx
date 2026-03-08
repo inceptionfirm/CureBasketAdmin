@@ -81,15 +81,15 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
   }, [editingCategory, isOpen]);
 
   const resetForm = () => {
-    setFormData({
-      name: '',
-      slug: '',
-      description: '',
-      status: 'ACTIVE',
-      sortOrder: 0,
-      image: '',
-      itemType: 'PRODUCT'
-    });
+      setFormData({
+        name: '',
+        slug: '',
+        description: '',
+        status: 'ACTIVE',
+        sortOrder: 0,
+        image: '',
+        itemType: 'PRODUCT'
+      });
     setErrors({});
     setSelectedFile(null);
     setImagePreview('');
@@ -125,11 +125,11 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
       }
 
       return {
-        ...prev,
+      ...prev,
         [name]: value,
       };
     });
-
+    
     if (errors[name as keyof CategoryFormData]) {
       setErrors(prev => ({
         ...prev,
@@ -210,7 +210,7 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
   const handleSaveDetails = async () => {
     console.log('📦 handleSaveDetails called');
     console.log('📦 Form data:', formData);
-
+    
     if (!validateForm()) {
       console.error('❌ Form validation failed');
       console.log('📦 Validation errors:', errors);
@@ -321,7 +321,7 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               {editingCategory ? 'Edit Category' : 'Add New Category'}
             </h2>
           </div>
-          <button
+          <button 
             className="category-modal-close-btn"
             onClick={handleClose}
             type="button"
@@ -655,7 +655,7 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                         {selectedFile ? 'Change Image' : categorySaved ? 'Choose Category Image' : 'Save details first'}
                       </span>
                       <span className="upload-hint">JPG, PNG, GIF (max 5MB)</span>
-                    </label>
+              </label>
                   </div>
 
                   <div className="upload-divider">
@@ -663,17 +663,17 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                   </div>
 
                   <div className="url-input-container">
-                    <input
-                      type="url"
-                      id="image"
-                      name="image"
-                      value={formData.image}
-                      onChange={handleInputChange}
-                      className="form-input"
-                      placeholder="Enter image URL"
+              <input
+                type="url"
+                id="image"
+                name="image"
+                value={formData.image}
+                onChange={handleInputChange}
+                className="form-input"
+                placeholder="Enter image URL"
                       disabled={!!selectedFile}
-                    />
-                  </div>
+              />
+            </div>
                 </div>
                 {errors.image && <span className="error-message">{errors.image}</span>}
               </>
@@ -694,14 +694,14 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
           )}
         </form>
 
-        <div className="category-modal-footer">
-          <button
-            type="button"
-            className="btn-cancel"
-            onClick={handleClose}
-          >
-            Cancel
-          </button>
+          <div className="category-modal-footer">
+            <button
+              type="button"
+              className="btn-cancel"
+              onClick={handleClose}
+            >
+              Cancel
+            </button>
           {categorySaved && (
             <button
               type="button"
@@ -804,7 +804,7 @@ const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               )}
             </button>
           )}
-        </div>
+          </div>
       </div>
     </div>
   );

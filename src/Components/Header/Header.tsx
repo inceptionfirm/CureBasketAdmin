@@ -129,17 +129,6 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onToggleSidebar, sidebarOpe
                   <span className="menu-icon">⚙️</span>
                   {t('header.settings')}
                 </button>
-                <button 
-                  className="user-menu-item"
-                  onClick={() => handleNavigation('contact')}
-                >
-                  <span className="menu-icon">📧</span>
-                  {t('header.contact') || 'Contact'}
-                </button>
-                <button className="user-menu-item">
-                  <span className="menu-icon">❓</span>
-                  {t('header.help')}
-                </button>
               </div>
               
               <div className="user-menu-divider"></div>

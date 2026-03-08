@@ -26,6 +26,20 @@ export interface ContactUsInfo {
   pincode: string;
 }
 
+// Order shipping config (shipping fee, discount ranges, tax rate)
+export interface DiscountRangeItem {
+  start: number;
+  end: number;
+  discount: number;
+}
+
+export interface OrderShippingConfig {
+  shippingFee: string;
+  discountRange: DiscountRangeItem[];
+  discountCriteria: string;
+  taxRate: string;
+}
+
 class MetadataService {
   /**
    * Get currently configured bank info
@@ -169,6 +183,42 @@ class MetadataService {
     return {
       success: true,
       message: response.message || 'Contact us info updated successfully',
+    };
+  }
+
+  /**
+   * Get order shipping config (shipping fee, discount range, tax rate)
+   */
+  async getOrderShippingConfig(): Promise<OrderShippingConfig | null> {
+    try {
+      const response = await apiClient.get<OrderShippingConfig | null>(
+        API_ENDPOINTS.metadata.getOrderShippingConfig
+      );
+      if (!response.success) {
+        return null;
+      }
+      return (response.data as OrderShippingConfig | null) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Configure order shipping config
+   */
+  async configureOrderShippingConfig(
+    payload: OrderShippingConfig
+  ): Promise<{ success: boolean; message?: string }> {
+    const response = await apiClient.post(
+      API_ENDPOINTS.metadata.configureOrderShippingConfig,
+      payload
+    );
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to save order shipping config');
+    }
+    return {
+      success: true,
+      message: response.message || 'Order shipping config updated successfully',
     };
   }
 }

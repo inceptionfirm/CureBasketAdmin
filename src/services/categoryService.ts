@@ -257,15 +257,73 @@ class CategoryService {
   }
 
   async getCategory(id: string): Promise<Category> {
+    // Use the correct endpoint: GET /catalog/categories/{categoryId}
+    const categoryId = Number(id);
+    if (isNaN(categoryId) || categoryId <= 0) {
+      throw new Error(`Invalid category ID: ${id}`);
+    }
+
     const response = await apiClient.get<Category>(
-      this.getEndpoint(`/${id}`)
+      `/catalog/categories/${categoryId}`
     );
 
     if (!response.success) {
       throw new Error(response.error || 'Failed to fetch category');
     }
 
-    return response.data!;
+    // Map API response to Category format
+    const apiCategory = response.data as any;
+    if (!apiCategory) {
+      throw new Error('Category data not found in response');
+    }
+
+    // Map API fields to Category interface
+    const rawStatus = (apiCategory.state ?? apiCategory.status ?? 'ACTIVE').toString().toUpperCase();
+    const status: Category['status'] =
+      rawStatus === 'INACTIVE'
+        ? 'inactive'
+        : rawStatus === 'DRAFT'
+          ? 'draft'
+          : 'active';
+
+    // Extract image from files array
+    let imageUrl = '';
+    if (apiCategory.files && Array.isArray(apiCategory.files) && apiCategory.files.length > 0) {
+      const fileWithPath = apiCategory.files.find((f: any) => f?.docPath);
+      if (fileWithPath?.docPath) {
+        const docPath = fileWithPath.docPath;
+        if (docPath.startsWith('http://') || docPath.startsWith('https://')) {
+          imageUrl = docPath;
+        } else {
+          const imageBaseURL = 'https://java.api.curebasket.com';
+          imageUrl = docPath.startsWith('/')
+            ? `${imageBaseURL}${docPath}`
+            : `${imageBaseURL}/${docPath}`;
+        }
+      }
+    }
+
+    return {
+      id: String(apiCategory.id ?? id),
+      name: apiCategory.categoryName ?? apiCategory.name ?? '',
+      description: apiCategory.categoryDescription ?? apiCategory.description ?? '',
+      slug: (apiCategory.slug ?? apiCategory.categoryName ?? apiCategory.name ?? '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-'),
+      image: imageUrl,
+      icon: apiCategory.icon ?? undefined,
+      status,
+      sortOrder: Number(apiCategory.sortOrder ?? 0),
+      metaTitle: apiCategory.metaTitle,
+      metaDescription: apiCategory.metaDescription,
+      seoKeywords: apiCategory.seoKeywords,
+      isFeatured: Boolean(apiCategory.isFeatured ?? false),
+      productCount: Number(apiCategory.productCount ?? 0),
+      createdAt: apiCategory.createdAt ?? '',
+      updatedAt: apiCategory.updatedAt ?? '',
+    };
   }
 
   // Create Category
@@ -365,7 +423,7 @@ class CategoryService {
     // Add forCategory flag to the payload
     payload.forCategory = true;
 
-    const response = await apiClient.post<{ message?: string }>(
+    const response = await apiClient.post<{ message?: string; data?: any }>(
       `/catalog/update-category/${categoryId}`,
       payload
     );
@@ -376,10 +434,99 @@ class CategoryService {
 
     const responseData = response.data || {};
 
-    // Get the updated category by fetching it
-    const updatedCategory = await this.getCategory(id);
+    // Try to get updated category from response, otherwise construct it from updates
+    if (responseData && typeof responseData === 'object' && 'id' in responseData) {
+      // Response contains the updated category
+      const apiCategory = responseData as any;
+      const rawStatus = (apiCategory.state ?? apiCategory.status ?? 'ACTIVE').toString().toUpperCase();
+      const status: Category['status'] =
+        rawStatus === 'INACTIVE'
+          ? 'inactive'
+          : rawStatus === 'DRAFT'
+            ? 'draft'
+            : 'active';
 
-    return updatedCategory;
+      // Extract image from files array
+      let imageUrl = '';
+      if (apiCategory.files && Array.isArray(apiCategory.files) && apiCategory.files.length > 0) {
+        const fileWithPath = apiCategory.files.find((f: any) => f?.docPath);
+        if (fileWithPath?.docPath) {
+          const docPath = fileWithPath.docPath;
+          if (docPath.startsWith('http://') || docPath.startsWith('https://')) {
+            imageUrl = docPath;
+          } else {
+            const imageBaseURL = 'https://java.api.curebasket.com';
+            imageUrl = docPath.startsWith('/')
+              ? `${imageBaseURL}${docPath}`
+              : `${imageBaseURL}/${docPath}`;
+          }
+        }
+      }
+
+      return {
+        id: String(apiCategory.id ?? id),
+        name: apiCategory.categoryName ?? apiCategory.name ?? updates.name ?? '',
+        description: apiCategory.categoryDescription ?? apiCategory.description ?? updates.description ?? '',
+        slug: (apiCategory.slug ?? apiCategory.categoryName ?? apiCategory.name ?? updates.name ?? '')
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '-'),
+        image: imageUrl,
+        icon: apiCategory.icon ?? undefined,
+        status,
+        sortOrder: Number(apiCategory.sortOrder ?? 0),
+        metaTitle: apiCategory.metaTitle,
+        metaDescription: apiCategory.metaDescription,
+        seoKeywords: apiCategory.seoKeywords,
+        isFeatured: Boolean(apiCategory.isFeatured ?? false),
+        productCount: Number(apiCategory.productCount ?? 0),
+        createdAt: apiCategory.createdAt ?? '',
+        updatedAt: apiCategory.updatedAt ?? new Date().toISOString(),
+      };
+    }
+
+    // If response doesn't contain category data, construct it from updates
+    // This is a fallback - ideally the API should return the updated category
+    console.warn('⚠️ Update response does not contain category data, constructing from updates');
+    
+    // Try to fetch the category, but if it fails, return a constructed category
+    try {
+      const updatedCategory = await this.getCategory(id);
+      return updatedCategory;
+    } catch (fetchError) {
+      console.warn('⚠️ Failed to fetch updated category, returning constructed category:', fetchError);
+      // Construct category from updates (fallback)
+      const rawStatus = (updates.status || 'ACTIVE').toString().toUpperCase();
+      const status: Category['status'] =
+        rawStatus === 'INACTIVE'
+          ? 'inactive'
+          : rawStatus === 'DRAFT'
+            ? 'draft'
+            : 'active';
+
+      return {
+        id: String(id),
+        name: updates.name || '',
+        description: updates.description || '',
+        slug: (updates.name || '')
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '-'),
+        image: updates.image || '',
+        icon: updates.icon,
+        status,
+        sortOrder: updates.sortOrder ?? 0,
+        metaTitle: updates.metaTitle,
+        metaDescription: updates.metaDescription,
+        seoKeywords: updates.seoKeywords,
+        isFeatured: updates.isFeatured ?? false,
+        productCount: updates.productCount ?? 0,
+        createdAt: updates.createdAt || '',
+        updatedAt: new Date().toISOString(),
+      };
+    }
   }
 
   // Delete Category

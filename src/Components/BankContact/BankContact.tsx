@@ -196,18 +196,9 @@ const BankContact: React.FC = () => {
             // Save to localStorage as backup (in case GET fails due to CORS)
             localStorage.setItem('contactUsInfo_backup', JSON.stringify(contactUsInfo));
 
-            // Update original info with saved data immediately (so it persists even if reload fails)
+            // Update original info with saved data (no refetch - GET get/contact-us often fails CORS on backend)
             setOriginalContactInfo(contactUsInfo);
             setIsContactEditing(false);
-
-            // Try to reload from server, but don't fail if it errors (CORS issue)
-            // The saved data is already in state and localStorage, so we're good
-            try {
-                await loadContactUsInfo();
-            } catch (reloadError) {
-                // Reload failed (likely CORS), but that's okay - we already have the saved data
-                console.warn('Failed to reload contact us info after save (CORS?), but data was saved:', reloadError);
-            }
 
             alert('Contact us information updated successfully. This will be shown on the website.');
         } catch (error) {

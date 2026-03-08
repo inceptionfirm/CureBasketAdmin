@@ -78,25 +78,39 @@ const DEFAULT_MENU_ITEMS: SidebarMenuItem[] = [
     order: 8
   },
   {
+    id: 'order-shipping-config',
+    title: 'Order & Shipping Config',
+    icon: '🚚',
+    path: '/order-shipping-config',
+    order: 9
+  },
+  {
+    id: 'cart',
+    title: 'Cart',
+    icon: '🛒',
+    path: '/cart',
+    order: 10
+  },
+  {
     id: 'dispense',
     title: 'Dispense',
     icon: '📦',
     path: '/dispense',
-    order: 9
+    order: 11
   },
   {
     id: 'profile',
     title: 'Profile',
     icon: '👤',
     path: '/profile',
-    order: 10
+    order: 12
   },
   {
     id: 'settings',
     title: 'Settings',
     icon: '⚙️',
     path: '/settings',
-    order: 11
+    order: 13
   }
 ];
 

@@ -50,6 +50,18 @@ const sideBarItems: SideBarItem[] = [
         link: "/bank-contact"
     },
     {
+        title: "Order & Shipping Config",
+        icon: "🚚",
+        key: "order-shipping-config",
+        link: "/order-shipping-config"
+    },
+    {
+        title: "Cart",
+        icon: "🛒",
+        key: "cart",
+        link: "/cart"
+    },
+    {
         title: "Dispense",
         icon: "📦",
         key: "dispense",

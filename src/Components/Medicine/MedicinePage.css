@@ -177,6 +177,23 @@
   min-width: 120px;
 }
 
+.medicine-partial-notice {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #856404;
+}
+
+.medicine-partial-notice code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
 .medicines-section {
   background: white;
   border-radius: 8px;

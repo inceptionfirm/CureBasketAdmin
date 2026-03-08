@@ -113,9 +113,12 @@ curl --location 'https://java.api.curebasket.com/backend/blog/update-blog/{blogI
   "content": "Updated blog content",
   "excerpt": "Short excerpt",
   "seoTitle": "SEO Title",
-  "seoDescription": "SEO Description"
+  "seoDescription": "SEO Description",
+  "enabled": true
 }'
 ```
+
+**Note:** The `enabled` field is included to ensure published blogs remain enabled. If the backend doesn't accept this field, please verify with the backend team.
 
 ### 2.3 Get Blog by ID
 ```bash

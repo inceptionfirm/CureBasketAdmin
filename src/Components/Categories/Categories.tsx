@@ -144,6 +144,10 @@ const Categories: React.FC = () => {
         console.log('📦 updateCategory response:', updatedCategory);
         categoryId = updatedCategory?.id ? Number(updatedCategory.id) : Number(editingCategory.id);
         console.log('📦 Extracted categoryId from update:', categoryId);
+        
+        // Reload categories immediately after update to show changes without refresh
+        console.log('📦 Reloading categories after update...');
+        await loadCategories();
       } else {
         // Map form data to API format for create
         const createPayload = {
@@ -162,10 +166,12 @@ const Categories: React.FC = () => {
           console.error('❌ Category ID is null after creation');
           throw new Error('Category created but ID not returned');
         }
+        
+        // Reload categories immediately after create to show new category
+        console.log('📦 Reloading categories after create...');
+        await loadCategories();
       }
 
-      // Don't reload categories here - let the modal handle it after image upload
-      // await loadCategories();
       console.log('✅ handleAddCategory returning categoryId:', categoryId);
       return categoryId;
     } catch (err) {
@@ -464,9 +470,12 @@ const Categories: React.FC = () => {
 
       <AddCategoryModal
         isOpen={isAddCategoryModalOpen}
-        onClose={() => {
+        onClose={async () => {
           setIsAddCategoryModalOpen(false);
           setEditingCategory(null);
+          // Reload categories when modal closes to ensure UI is up-to-date
+          // This handles cases where details were saved but no image was uploaded
+          await loadCategories();
         }}
         onSubmit={handleAddCategory}
         onImageUpload={handleImageUpload}

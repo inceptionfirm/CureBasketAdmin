@@ -77,11 +77,27 @@ const MOCK_SIDEBAR_DATA: MockSidebarResponse = {
       permissions: ['bank-contact:read']
     } as SidebarMenuItem,
     {
+      id: 'order-shipping-config',
+      title: 'Order & Shipping Config',
+      icon: '🚚',
+      path: '/order-shipping-config',
+      order: 9,
+      permissions: ['order-shipping-config:read']
+    } as SidebarMenuItem,
+    {
+      id: 'cart',
+      title: 'Cart',
+      icon: '🛒',
+      path: '/cart',
+      order: 10,
+      permissions: ['cart:read']
+    } as SidebarMenuItem,
+    {
       id: 'dispense',
       title: 'Dispense',
       icon: '📦',
       path: '/dispense',
-      order: 9,
+      order: 11,
       permissions: ['dispense:read']
     } as SidebarMenuItem,
     {
@@ -89,7 +105,7 @@ const MOCK_SIDEBAR_DATA: MockSidebarResponse = {
       title: 'Profile',
       icon: '👤',
       path: '/profile',
-      order: 10,
+      order: 12,
       permissions: ['profile:read']
     } as SidebarMenuItem,
     {
@@ -97,7 +113,7 @@ const MOCK_SIDEBAR_DATA: MockSidebarResponse = {
       title: 'Settings',
       icon: '⚙️',
       path: '/settings',
-      order: 11,
+      order: 13,
       permissions: ['settings:read']
     } as SidebarMenuItem
   ],
@@ -110,6 +126,8 @@ const MOCK_SIDEBAR_DATA: MockSidebarResponse = {
     'prescriptions:read',
     'medicine:read',
     'bank-contact:read',
+    'order-shipping-config:read',
+    'cart:read',
     'dispense:read',
     'profile:read',
     'settings:read'

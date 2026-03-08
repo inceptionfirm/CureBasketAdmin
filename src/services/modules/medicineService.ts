@@ -1,6 +1,37 @@
 // Medicine Service - Handles all medicine-related API calls
 import { apiClient } from '../apiClient';
 
+// FAQ interface
+export interface FAQ {
+  question?: string;
+  answer?: string;
+  q?: string; // Alternative field name
+  a?: string; // Alternative field name
+}
+
+// Package interface for dosages
+export interface MedicinePackage {
+  size?: number | string;
+  quantity?: number | string;
+  label?: string;
+  unit?: string; // e.g., "Tablet/s"
+  totalPrice?: number;
+  price?: number;
+  pricePerTablet?: number;
+  pricePerUnit?: number;
+  originalPrice?: number;
+  oldPrice?: number;
+}
+
+// Dosage interface
+export interface MedicineDosage {
+  strength?: string;
+  value?: string;
+  label?: string;
+  packages?: MedicinePackage[];
+  sizes?: MedicinePackage[];
+}
+
 export interface Medicine {
   id: number;
   name: string;
@@ -23,6 +54,37 @@ export interface Medicine {
   barcode?: string;
   prescriptionRequired?: boolean;
   countryOfOrigin?: string;
+  
+  // New fields for listing/card
+  type?: 'prescription' | 'otc' | 'supplement' | 'equipment';
+  rating?: number;
+  reviews?: number;
+  reviewsCount?: number;
+  originalPrice?: number;
+  
+  // New fields for detail page - product info
+  genericFor?: string; // or brandName/brand
+  brandName?: string;
+  brand?: string;
+  activeIngredient?: string; // or salt/saltComposition
+  salt?: string;
+  saltComposition?: string;
+  
+  // New fields for detail page - extra sections
+  precautions?: string;
+  sideEffects?: string;
+  howToUse?: string; // or dosage/usage
+  dosage?: string;
+  usage?: string;
+  faqs?: FAQ[];
+  
+  // New fields for rating & discount
+  discountPercent?: number;
+  
+  // New fields for packages/dosages
+  availableDosages?: MedicineDosage[];
+  dosages?: MedicineDosage[];
+  packages?: MedicineDosage[];
 }
 
 export interface MedicineListParams {
@@ -39,6 +101,8 @@ export interface MedicineListResponse {
     total: number;
     totalPages: number;
   };
+  /** When API reports more records than returned (e.g. pageInfo.totalRecords), for partial-list notice */
+  totalRecordsFromApi?: number;
 }
 
 class MedicineService {
@@ -67,18 +131,18 @@ class MedicineService {
   // GET /medicines/getAllMedicines?page=0&size=10&sortBy=name
   async getAllMedicines(params: MedicineListParams = {}): Promise<MedicineListResponse> {
     const queryParams: Record<string, any> = {};
-    
-    // Page parameter - ensure it's 0-based
-    queryParams.page = params.page !== undefined ? params.page : 0;
-    
-    // Size parameter
-    queryParams.size = params.size !== undefined ? params.size : 10;
-    
-    // SortBy parameter - only include if provided and valid
+    const page = params.page !== undefined ? params.page : 0;
+    const size = params.size !== undefined ? params.size : 10;
+
+    queryParams.page = page;
+    queryParams.size = size;
+    // Some backends also accept pageNumber (0-based)
+    queryParams.pageNumber = page;
+
     if (params.sortBy && params.sortBy.trim() !== '') {
       queryParams.sortBy = params.sortBy;
     }
-    
+
     const response = await apiClient.get<any>(`${this.baseEndpoint}/getAllMedicines`, queryParams);
 
     if (!response.success) {
@@ -141,6 +205,51 @@ class MedicineService {
         total: pageInfo?.totalRecords ?? pageInfo?.total ?? content.length,
         totalPages: pageInfo?.totalPages ?? 1,
       },
+    };
+  }
+
+  /**
+   * Fetches all medicines. Tries one request with size=500, then paginates if needed.
+   * Backend note: If the API always returns only the first N items (e.g. 17) and ignores
+   * size and page>0, the UI will show a "Showing X of Y" notice; fix getAllMedicines
+   * to honour size and page so all records can be loaded.
+   */
+  async getAllMedicinesAllPages(params: Omit<MedicineListParams, 'page' | 'size'> & { pageSize?: number } = {}): Promise<MedicineListResponse> {
+    const requestedPageSize = params.pageSize ?? 20;
+    const allMedicines: any[] = [];
+    let total = 0;
+
+    // 1) Try a single request with large size so backend returns all (e.g. 26)
+    const largeRes = await this.getAllMedicines({ ...params, page: 0, size: 500 });
+    total = largeRes.pagination?.total ?? largeRes.medicines.length;
+    allMedicines.push(...largeRes.medicines);
+
+    // 2) If we still have fewer than total, fetch next pages (backend may ignore size and cap at 17)
+    let page = 1;
+    while (allMedicines.length < total && page <= 99) {
+      const res = await this.getAllMedicines({ ...params, page, size: requestedPageSize });
+      if (res.medicines.length === 0) break;
+      // Avoid duplicates: only add items we don't already have by id
+      const existingIds = new Set(allMedicines.map((m: any) => m.id));
+      for (const m of res.medicines) {
+        if (!existingIds.has(m.id)) {
+          existingIds.add(m.id);
+          allMedicines.push(m);
+        }
+      }
+      if (res.medicines.length < requestedPageSize) break;
+      page++;
+    }
+
+    return {
+      medicines: allMedicines,
+      pagination: {
+        page: 1,
+        size: allMedicines.length,
+        total: allMedicines.length,
+        totalPages: Math.ceil(allMedicines.length / requestedPageSize) || 1,
+      },
+      totalRecordsFromApi: total > allMedicines.length ? total : undefined,
     };
   }
 

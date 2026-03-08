@@ -230,7 +230,7 @@ export const defaultConfig: AppConfig = {
   },
 
   layout: {
-    sidebarWidth: "280px",
+    sidebarWidth: "240px",
     headerHeight: "80px",
     borderRadius: "12px",
     spacing: {
