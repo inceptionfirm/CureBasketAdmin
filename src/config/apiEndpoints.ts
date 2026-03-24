@@ -153,7 +153,7 @@ export const API_ENDPOINTS = {
 
     // Mail templates for different statuses (e.g. APPROVE, DISPENSED)
     configureMailInfo: (status: string) => `/metadata/configure/mail-info/${status}`,
-    getMailInfo: '/metadata/get/mail-info',
+    getMailInfo: '/mail-info',
 
     // Contact us information (shown on website)
     configureContactUsInfo: '/metadata/configure/contact-us',

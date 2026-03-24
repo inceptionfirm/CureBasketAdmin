@@ -10,13 +10,14 @@ export interface BankInfo {
 }
 
 // Mail template configuration for a given status (e.g. APPROVE, DISPENSED)
-export interface MailTemplate {
+type MailTemplate = {
   fromMail: string;
-  secretKey: string;
+  mailSecretKey: string;
   title: string;
   content: string;
-  status?: string;
-}
+  serviceType: string;
+  serviceStatus: string;
+};
 
 // Contact us information (shown on website)
 export interface ContactUsInfo {

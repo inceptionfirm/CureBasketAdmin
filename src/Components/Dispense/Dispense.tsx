@@ -1,106 +1,125 @@
 import React, { useEffect, useState } from 'react';
-import { metadataService, type MailTemplate } from '../../services/metadataService';
 import './Dispense.css';
+import apiClient from '../../services/apiClient';
+
+type MailTemplate = {
+  fromMail: string;
+  mailSecretKey: string;
+  title: string;
+  content: string;
+  serviceType: string;
+  serviceStatus: string;
+};
+
+const SERVICE_TYPES = ['PRESCRIPTION', 'ORDER'];
+
+const STATUS_MAP: Record<string, string[]> = {
+  PRESCRIPTION: ['APPROVED', 'DISPENSED'],
+  ORDER: ['PURCHASED', 'SHIPPED'],
+};
 
 const Dispense: React.FC = () => {
-  // Mail template configuration state for DISPENSED only
+  const [serviceType, setServiceType] = useState('PRESCRIPTION');
+  const [serviceStatus, setServiceStatus] = useState('DISPENSED');
+
   const [mailTemplate, setMailTemplate] = useState<MailTemplate>({
     fromMail: '',
-    secretKey: '',
+    mailSecretKey: '',
     title: '',
     content: '',
-    status: 'DISPENSED',
+    serviceType: 'PRESCRIPTION',
+    serviceStatus: 'DISPENSED',
   });
-  const [mailLoading, setMailLoading] = useState<boolean>(false);
-  const [mailSaving, setMailSaving] = useState<boolean>(false);
+
+  const [mailLoading, setMailLoading] = useState(false);
+  const [mailSaving, setMailSaving] = useState(false);
   const [mailError, setMailError] = useState<string | null>(null);
 
-  // Load configured mail template
-  const loadMailTemplate = async () => {
-    try {
-      setMailLoading(true);
-      setMailError(null);
-      const data = await metadataService.getMailInfo();
-
-      // Handle different response formats
-      if (Array.isArray(data)) {
-        // If it's an array, find template by status
-        const dispensedTemplate = data.find((t: any) => t.status === 'DISPENSED');
-
-        if (dispensedTemplate) {
-          setMailTemplate({
-            fromMail: dispensedTemplate.fromMail || '',
-            secretKey: dispensedTemplate.secretKey || '',
-            title: dispensedTemplate.title || '',
-            content: dispensedTemplate.content || '',
-            status: 'DISPENSED',
-          });
-        }
-      } else if (data && typeof data === 'object') {
-        // If it's an object, check for direct properties
-        if (data.DISPENSED) {
-          setMailTemplate({
-            fromMail: data.DISPENSED.fromMail || '',
-            secretKey: data.DISPENSED.secretKey || '',
-            title: data.DISPENSED.title || '',
-            content: data.DISPENSED.content || '',
-            status: 'DISPENSED',
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load mail template:', error);
-      setMailError(
-        error instanceof Error ? error.message : 'Failed to load mail template'
-      );
-    } finally {
-      setMailLoading(false);
-    }
-  };
-
+  // ✅ Load template (triggered only when dropdown changes)
   useEffect(() => {
-    loadMailTemplate();
-  }, []);
+    const load = async () => {
+      try {
+        setMailLoading(true);
+        setMailError(null);
 
-  const handleMailChange = (field: keyof MailTemplate, value: string) => {
+        const res = await apiClient.get(
+          `/mail-info/${serviceType}/${serviceStatus}`
+        );
+
+        if (!res.success) throw new Error(res.error);
+
+        const data = res.data || {};
+
+        setMailTemplate({
+          fromMail: data.fromMail || '',
+          mailSecretKey: data.mailSecretKey || '',
+          title: data.title || '',
+          content: data.content || '',
+          serviceType,
+          serviceStatus,
+        });
+      } catch (err: any) {
+        console.error(err);
+        setMailError(err.message || 'Failed to load template');
+
+        // reset fields if not found
+        setMailTemplate(prev => ({
+          ...prev,
+          fromMail: '',
+          mailSecretKey: '',
+          title: '',
+          content: '',
+        }));
+      } finally {
+        setMailLoading(false);
+      }
+    };
+
+    load();
+  }, [serviceType, serviceStatus]);
+
+  const handleChange = (field: keyof MailTemplate, value: string) => {
     setMailTemplate(prev => ({
       ...prev,
       [field]: value,
     }));
   };
 
-  const handleMailSave = async () => {
+  // ✅ Save template
+  const handleSave = async () => {
     try {
       setMailSaving(true);
       setMailError(null);
 
-      const template = mailTemplate;
-      // Remove status from payload as it's in the URL
-      const { status: _, ...payload } = template;
+      const payload = {
+        ...mailTemplate,
+        serviceType,
+        serviceStatus,
+      };
 
-      await metadataService.configureMailInfo('DISPENSED', payload);
+      const res = await apiClient.post('/mail-info', payload);
 
-      // Reload mail template from server after successful save
-      await loadMailTemplate();
+      if (!res.success) throw new Error(res.error);
 
-      alert('Dispense mail template updated successfully.');
-    } catch (error) {
-      console.error('Failed to save mail template:', error);
-      const message =
-        error instanceof Error ? error.message : 'Failed to save mail template';
-      setMailError(message);
-      alert(message);
+      alert('Template saved successfully');
+    } catch (err: any) {
+      console.error(err);
+      setMailError(err.message || 'Failed to save');
     } finally {
       setMailSaving(false);
     }
   };
 
+  const currentStatuses = STATUS_MAP[serviceType];
+
   return (
     <div className="dispense-container">
       <div className="dispense-header">
         <div className="header-icon">📦</div>
-        <h1>Dispense Mail Configuration</h1>
-        <p>Configure email template that will be sent when prescriptions are dispensed</p>
+        <h1>Mail Configuration</h1>
+        <p>
+          Configure email template that will be sent to customer on different occasions
+        </p>
       </div>
 
       <div className="dispense-content">
@@ -108,9 +127,9 @@ const Dispense: React.FC = () => {
           <div className="card-header">
             <div className="card-icon">✉️</div>
             <div className="card-title-group">
-              <h2>DISPENSED Prescription Email Template</h2>
+              <h2>Email Template</h2>
               <p className="card-subtitle">
-                Configure the email that will be automatically sent to customers when their prescription is dispensed
+                Configure the email based on service and status
               </p>
             </div>
           </div>
@@ -131,82 +150,108 @@ const Dispense: React.FC = () => {
 
           {!mailLoading && (
             <div className="form-body">
+
+              {/* ✅ Service Dropdown */}
               <div className="form-row">
                 <div className="form-field full-width">
-                  <label htmlFor="dispense-from-mail">
-                    <span className="label-icon">📧</span>
-                    From Email
-                  </label>
+                  <label>Service Type</label>
+                  <select
+                    className="form-input"
+                    value={serviceType}
+                    onChange={(e) => {
+                      const newService = e.target.value;
+                      setServiceType(newService);
+                      setServiceStatus(STATUS_MAP[newService][0]);
+                    }}
+                  >
+                    {SERVICE_TYPES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* ✅ Status Dropdown */}
+              <div className="form-row">
+                <div className="form-field full-width">
+                  <label>Status</label>
+                  <select
+                    className="form-input"
+                    value={serviceStatus}
+                    onChange={(e) => setServiceStatus(e.target.value)}
+                  >
+                    {currentStatuses.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* From Email */}
+              <div className="form-row">
+                <div className="form-field full-width">
+                  <label>From Email</label>
                   <input
-                    id="dispense-from-mail"
                     type="email"
                     className="form-input"
                     value={mailTemplate.fromMail}
-                    onChange={(e) => handleMailChange('fromMail', e.target.value)}
-                    placeholder="e.g., inceptionfirm@gmail.com"
+                    onChange={(e) =>
+                      handleChange('fromMail', e.target.value)
+                    }
                   />
-                  <span className="field-hint">Email address that will send the dispensed notification</span>
                 </div>
               </div>
 
+              {/* Secret Key */}
               <div className="form-row">
                 <div className="form-field full-width">
-                  <label htmlFor="dispense-secret-key">
-                    <span className="label-icon">🔐</span>
-                    Secret Key
-                  </label>
+                  <label>Secret Key</label>
                   <input
-                    id="dispense-secret-key"
                     type="password"
                     className="form-input"
-                    value={mailTemplate.secretKey}
-                    onChange={(e) => handleMailChange('secretKey', e.target.value)}
-                    placeholder="e.g., tgrgmtvaphfnezlx"
+                    value={mailTemplate.mailSecretKey}
+                    onChange={(e) =>
+                      handleChange('mailSecretKey', e.target.value)
+                    }
                   />
-                  <span className="field-hint">Email service secret key (e.g., Gmail app password)</span>
                 </div>
               </div>
 
+              {/* Title */}
               <div className="form-row">
                 <div className="form-field full-width">
-                  <label htmlFor="dispense-title">
-                    <span className="label-icon">📝</span>
-                    Email Title / Subject
-                  </label>
+                  <label>Email Subject</label>
                   <input
-                    id="dispense-title"
                     type="text"
                     className="form-input"
                     value={mailTemplate.title}
-                    onChange={(e) => handleMailChange('title', e.target.value)}
-                    placeholder="e.g., Your Prescription Has Been Dispensed"
+                    onChange={(e) =>
+                      handleChange('title', e.target.value)
+                    }
                   />
-                  <span className="field-hint">Subject line for the dispensed email</span>
                 </div>
               </div>
 
+              {/* Content */}
               <div className="form-row">
                 <div className="form-field full-width">
-                  <label htmlFor="dispense-content">
-                    <span className="label-icon">📄</span>
-                    Email Content
-                  </label>
+                  <label>Email Content</label>
                   <textarea
-                    id="dispense-content"
                     className="form-textarea"
                     rows={8}
                     value={mailTemplate.content}
-                    onChange={(e) => handleMailChange('content', e.target.value)}
-                    placeholder="Enter the email body content here..."
+                    onChange={(e) =>
+                      handleChange('content', e.target.value)
+                    }
                   />
-                  <span className="field-hint">Body content of the dispensed email</span>
                 </div>
               </div>
 
+              {/* Save */}
               <div className="card-actions">
                 <button
                   className="save-btn primary"
-                  onClick={handleMailSave}
+                  onClick={handleSave}
                   disabled={mailSaving}
                 >
                   {mailSaving ? (
@@ -216,12 +261,12 @@ const Dispense: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <span>💾</span>
-                      Save Dispense Template
+                      💾 Save Template
                     </>
                   )}
                 </button>
               </div>
+
             </div>
           )}
         </div>
