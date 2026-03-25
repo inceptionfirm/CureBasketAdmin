@@ -7,6 +7,7 @@ type MailTemplate = {
   mailSecretKey: string;
   title: string;
   content: string;
+  placeHolders: string;
   serviceType: string;
   serviceStatus: string;
 };
@@ -29,6 +30,7 @@ const Dispense: React.FC = () => {
     content: '',
     serviceType: 'PRESCRIPTION',
     serviceStatus: 'DISPENSED',
+    placeHolders: `<customerName>`
   });
 
   const [mailLoading, setMailLoading] = useState(false);
@@ -57,7 +59,11 @@ const Dispense: React.FC = () => {
           content: data.content || '',
           serviceType,
           serviceStatus,
+          placeHolders: data.placeHolders || `<customerName>`,
         });
+
+        console.log("this is the mailTemplate",mailTemplate);
+        
       } catch (err: any) {
         console.error(err);
         setMailError(err.message || 'Failed to load template');
@@ -244,6 +250,20 @@ const Dispense: React.FC = () => {
                       handleChange('content', e.target.value)
                     }
                   />
+                </div>
+              </div>
+
+              {/* PlaceHolder */}
+              <div className="form-row">
+                <div className="form-field full-width">
+                  <label>PlaceHolder</label>
+                  <p
+                    className="form-input">
+                  
+                    {mailTemplate.placeHolders}
+                    </p>
+                    
+                 
                 </div>
               </div>
 
