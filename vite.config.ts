@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://java.api.curebasket.com/backend',
+        target: 'https://api.curebasket.com/backend',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
         secure: true,
@@ -18,7 +18,7 @@ export default defineConfig({
           proxy.on('proxyReq', (proxyReq, req, _res) => {
             // Only log non-GET requests to reduce noise
             if (req.method !== 'GET') {
-              console.log('📤 Proxy:', req.method, req.url, '→', 'https://java.api.curebasket.com/backend' + req.url);
+              console.log('📤 Proxy:', req.method, req.url, '→', 'https://api.curebasket.com/backend' + req.url);
             }
           });
           // Track logged 404s to avoid spam

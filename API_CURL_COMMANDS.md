@@ -2,7 +2,7 @@
 
 This document contains all the curl commands for integrating Banner, Blog, Medicine, Category, and Prescription APIs.
 
-**Base URL:** `https://java.api.curebasket.com/backend`
+**Base URL:** `https://api.curebasket.com/backend`
 
 **Note:** Replace `YOUR_AUTH_TOKEN` with your actual Bearer token in all requests.
 
@@ -12,7 +12,7 @@ This document contains all the curl commands for integrating Banner, Blog, Medic
 
 ### 1.1 Create Banner
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/banner/add-banner' \
+curl --location 'https://api.curebasket.com/backend/banner/add-banner' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -28,7 +28,7 @@ curl --location 'https://java.api.curebasket.com/backend/banner/add-banner' \
 
 ### 1.2 Update Banner
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/banner/update-banner/{bannerId}' \
+curl --location 'https://api.curebasket.com/backend/banner/update-banner/{bannerId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -44,7 +44,7 @@ curl --location 'https://java.api.curebasket.com/backend/banner/update-banner/{b
 
 ### 1.3 Get Banner by ID
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/banner/get-banner/{bannerId}' \
+curl --location 'https://api.curebasket.com/backend/banner/get-banner/{bannerId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -52,13 +52,13 @@ curl --location 'https://java.api.curebasket.com/backend/banner/get-banner/{bann
 
 ### 1.4 Get All Banners
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/banner/get-all?itemType=BANNER&status=ACTIVE&position=TOP&page=0&pageSize=10&sortBy=ID&sortOrder=DESC' \
+curl --location 'https://api.curebasket.com/backend/banner/get-all?itemType=BANNER&status=ACTIVE&position=TOP&page=0&pageSize=10&sortBy=ID&sortOrder=DESC' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN'
 ```
 
 ### 1.5 Delete Banner
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/banner/delete/{bannerId}' \
+curl --location 'https://api.curebasket.com/backend/banner/delete/{bannerId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -66,7 +66,7 @@ curl --location 'https://java.api.curebasket.com/backend/banner/delete/{bannerId
 
 ### 1.6 Upload Banner Image
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/upload/file/{bannerId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/upload/file/{bannerId}' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --form 'file=@"/path/to/image.jpg"' \
 --form 'itemType="BANNER"' \
@@ -75,7 +75,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/upload/file/{ba
 
 ### 1.7 Delete Banner File
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/delete/file?fileId={fileId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/delete/file?fileId={fileId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -87,7 +87,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/delete/file?fil
 
 ### 2.1 Create Blog
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/blog/add-blog' \
+curl --location 'https://api.curebasket.com/backend/blog/add-blog' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -103,7 +103,7 @@ curl --location 'https://java.api.curebasket.com/backend/blog/add-blog' \
 
 ### 2.2 Update Blog
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/blog/update-blog/{blogId}' \
+curl --location 'https://api.curebasket.com/backend/blog/update-blog/{blogId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -122,7 +122,7 @@ curl --location 'https://java.api.curebasket.com/backend/blog/update-blog/{blogI
 
 ### 2.3 Get Blog by ID
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/blog/get-blog/{blogId}' \
+curl --location 'https://api.curebasket.com/backend/blog/get-blog/{blogId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -130,7 +130,7 @@ curl --location 'https://java.api.curebasket.com/backend/blog/get-blog/{blogId}'
 
 ### 2.4 Get All Blogs
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=DRAFT&page=0&pageSize=10&sortBy=ID&sortOrder=DESC' \
+curl --location 'https://api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=DRAFT&page=0&pageSize=10&sortBy=ID&sortOrder=DESC' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN'
 ```
 
@@ -138,7 +138,7 @@ curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=B
 
 ### 2.5 Delete Blog
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/blog/delete/{blogId}' \
+curl --location 'https://api.curebasket.com/backend/blog/delete/{blogId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -146,7 +146,7 @@ curl --location 'https://java.api.curebasket.com/backend/blog/delete/{blogId}' \
 
 ### 2.6 Upload Blog Image
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/upload/file/{blogId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/upload/file/{blogId}' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --form 'file=@"/path/to/image.jpg"' \
 --form 'itemType="BLOG"' \
@@ -155,7 +155,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/upload/file/{bl
 
 ### 2.7 Delete Blog File
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/delete/file?fileId={fileId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/delete/file?fileId={fileId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -167,7 +167,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/delete/file?fil
 
 ### 3.1 Create Medicine
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/medicines/createMedicine' \
+curl --location 'https://api.curebasket.com/backend/medicines/createMedicine' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -192,7 +192,7 @@ curl --location 'https://java.api.curebasket.com/backend/medicines/createMedicin
 
 ### 3.2 Update Medicine
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/medicines/updateMedicine/{medicineId}' \
+curl --location 'https://api.curebasket.com/backend/medicines/updateMedicine/{medicineId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -204,25 +204,25 @@ curl --location 'https://java.api.curebasket.com/backend/medicines/updateMedicin
 
 ### 3.3 Get Medicine by ID
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/medicines/getMedicineById/{medicineId}' \
+curl --location 'https://api.curebasket.com/backend/medicines/getMedicineById/{medicineId}' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN'
 ```
 
 ### 3.4 Get All Medicines
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/medicines/getAllMedicines?page=0&size=10&sortBy=name' \
+curl --location 'https://api.curebasket.com/backend/medicines/getAllMedicines?page=0&size=10&sortBy=name' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN'
 ```
 
 ### 3.5 Delete Medicine
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/medicines/deleteMedicine/{medicineId}' \
+curl --location 'https://api.curebasket.com/backend/medicines/deleteMedicine/{medicineId}' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN'
 ```
 
 ### 3.6 Upload Medicine Image
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/medicines/image/upload/{medicineId}' \
+curl --location 'https://api.curebasket.com/backend/medicines/image/upload/{medicineId}' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --form 'file=@"/path/to/image.jpg"'
 ```
@@ -235,7 +235,7 @@ curl --location 'https://java.api.curebasket.com/backend/medicines/image/upload/
 
 ### 4.1 Create Category
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/add-category' \
+curl --location 'https://api.curebasket.com/backend/catalog/add-category' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -249,7 +249,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/add-category' \
 
 ### 4.2 Update Category
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/update-category/{categoryId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/update-category/{categoryId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -263,13 +263,13 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/update-category
 
 ### 4.3 Get Category by ID
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/categories/{categoryId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/categories/{categoryId}' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN'
 ```
 
 ### 4.4 Get All Categories
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/categories?itemType=PRODUCT&status=ACTIVE&page=0&pageSize=10&sortBy=ID&sortOrder=ASC' \
+curl --location 'https://api.curebasket.com/backend/catalog/categories?itemType=PRODUCT&status=ACTIVE&page=0&pageSize=10&sortBy=ID&sortOrder=ASC' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN'
 ```
 
@@ -279,7 +279,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/categories?item
 
 ### 4.5 Delete Category
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/delete-category/{categoryId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/delete-category/{categoryId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -287,7 +287,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/delete-category
 
 ### 4.6 Upload Category Image
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/upload/file/{categoryId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/upload/file/{categoryId}' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --form 'file=@"/path/to/image.jpg"' \
 --form 'itemType="PRODUCT"' \
@@ -303,7 +303,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/upload/file/{ca
 
 ### 4.7 Delete Category File
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/delete/file?fileId={fileId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/delete/file?fileId={fileId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -315,7 +315,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/delete/file?fil
 
 ### 5.1 Create Prescription
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/prescriptions/add-prescription' \
+curl --location 'https://api.curebasket.com/backend/prescriptions/add-prescription' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -348,7 +348,7 @@ curl --location 'https://java.api.curebasket.com/backend/prescriptions/add-presc
 
 ### 5.2 Update Prescription
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/prescriptions/update-prescription/{prescriptionId}' \
+curl --location 'https://api.curebasket.com/backend/prescriptions/update-prescription/{prescriptionId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -360,7 +360,7 @@ curl --location 'https://java.api.curebasket.com/backend/prescriptions/update-pr
 
 ### 5.3 Get Prescription by ID
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/prescriptions/get-prescription/{prescriptionId}' \
+curl --location 'https://api.curebasket.com/backend/prescriptions/get-prescription/{prescriptionId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -368,7 +368,7 @@ curl --location 'https://java.api.curebasket.com/backend/prescriptions/get-presc
 
 ### 5.4 Get All Prescriptions
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/prescriptions/get-all?itemType=PRESCRIPTION&status=PENDING&priority=HIGH&page=0&pageSize=10&sortBy=ID&sortOrder=DESC' \
+curl --location 'https://api.curebasket.com/backend/prescriptions/get-all?itemType=PRESCRIPTION&status=PENDING&priority=HIGH&page=0&pageSize=10&sortBy=ID&sortOrder=DESC' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN'
 ```
 
@@ -378,7 +378,7 @@ curl --location 'https://java.api.curebasket.com/backend/prescriptions/get-all?i
 
 ### 5.5 Delete Prescription
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/prescriptions/delete/{prescriptionId}' \
+curl --location 'https://api.curebasket.com/backend/prescriptions/delete/{prescriptionId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -386,7 +386,7 @@ curl --location 'https://java.api.curebasket.com/backend/prescriptions/delete/{p
 
 ### 5.6 Upload Prescription File
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/upload/file/{prescriptionId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/upload/file/{prescriptionId}' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --form 'file=@"/path/to/prescription.pdf"' \
 --form 'itemType="PRESCRIPTION"' \
@@ -395,7 +395,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/upload/file/{pr
 
 ### 5.7 Delete Prescription File
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/delete/file?fileId={fileId}' \
+curl --location 'https://api.curebasket.com/backend/catalog/delete/file?fileId={fileId}' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{}'
@@ -513,7 +513,7 @@ All APIs return responses in the following format:
 
 ```bash
 # 1. Create Blog
-curl --location 'https://java.api.curebasket.com/backend/blog/add-blog' \
+curl --location 'https://api.curebasket.com/backend/blog/add-blog' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -527,14 +527,14 @@ curl --location 'https://java.api.curebasket.com/backend/blog/add-blog' \
 # Response: { "success": true, "data": { "id": 73, ... } }
 
 # 2. Upload Image (using the ID from step 1)
-curl --location 'https://java.api.curebasket.com/backend/catalog/upload/file/73' \
+curl --location 'https://api.curebasket.com/backend/catalog/upload/file/73' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --form 'file=@"/path/to/image.jpg"' \
 --form 'itemType="BLOG"' \
 --form 'documentType="thumbnail"'
 
 # 3. Update Blog Status
-curl --location 'https://java.api.curebasket.com/backend/blog/update-blog/73' \
+curl --location 'https://api.curebasket.com/backend/blog/update-blog/73' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN' \
 --data '{
@@ -542,7 +542,7 @@ curl --location 'https://java.api.curebasket.com/backend/blog/update-blog/73' \
 }'
 
 # 4. Get All Blogs
-curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=PUBLISHED' \
+curl --location 'https://api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=PUBLISHED' \
 --header 'Authorization: Bearer YOUR_AUTH_TOKEN'
 ```
 

@@ -2,7 +2,7 @@ import React from 'react';
 import type { AdminOrder, CartItem, OrderStatus } from '../../services/cartService';
 import './AdminCartDetails.css';
 
-const IMAGE_BASE = 'https://java.api.curebasket.com';
+const IMAGE_BASE = 'https://api.curebasket.com';
 
 function buildImageUrl(path?: string): string | null {
   if (!path?.trim()) return null;

@@ -165,7 +165,7 @@ export const DEFAULT_CLIENT_CONFIG: ClientConfig = {
   },
   api: {
     // Always use the actual backend URL
-    baseURL: 'https://java.api.curebasket.com/backend',
+    baseURL: 'https://api.curebasket.com/backend',
     version: '',
     endpoints: {
       auth: '/auth',

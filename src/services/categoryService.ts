@@ -193,7 +193,7 @@ class CategoryService {
             imageUrl = docPath;
           } else {
             // Base URL for images (without /backend)
-            const imageBaseURL = 'https://java.api.curebasket.com';
+            const imageBaseURL = 'https://api.curebasket.com';
             imageUrl = docPath.startsWith('/')
               ? `${imageBaseURL}${docPath}`
               : `${imageBaseURL}/${docPath}`;
@@ -295,7 +295,7 @@ class CategoryService {
         if (docPath.startsWith('http://') || docPath.startsWith('https://')) {
           imageUrl = docPath;
         } else {
-          const imageBaseURL = 'https://java.api.curebasket.com';
+          const imageBaseURL = 'https://api.curebasket.com';
           imageUrl = docPath.startsWith('/')
             ? `${imageBaseURL}${docPath}`
             : `${imageBaseURL}/${docPath}`;
@@ -455,7 +455,7 @@ class CategoryService {
           if (docPath.startsWith('http://') || docPath.startsWith('https://')) {
             imageUrl = docPath;
           } else {
-            const imageBaseURL = 'https://java.api.curebasket.com';
+            const imageBaseURL = 'https://api.curebasket.com';
             imageUrl = docPath.startsWith('/')
               ? `${imageBaseURL}${docPath}`
               : `${imageBaseURL}/${docPath}`;

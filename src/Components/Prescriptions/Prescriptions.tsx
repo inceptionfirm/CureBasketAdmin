@@ -85,7 +85,7 @@ const Prescriptions: React.FC = () => {
       apiPrescription.files.forEach((file: any) => {
         if (file.docPath) {
           const docPath = file.docPath;
-          const imageBaseURL = 'https://java.api.curebasket.com';
+          const imageBaseURL = 'https://api.curebasket.com';
           const fullUrl = docPath.startsWith('http') 
             ? docPath 
             : docPath.startsWith('/') 

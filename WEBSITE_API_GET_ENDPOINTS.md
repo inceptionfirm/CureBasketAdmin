@@ -2,7 +2,7 @@
 
 This document contains **ONLY GET endpoints** for the public website. These endpoints are used to display content that admins have added through the admin panel.
 
-**Base URL:** `https://java.api.curebasket.com/backend`
+**Base URL:** `https://api.curebasket.com/backend`
 
 **Important:** 
 - Only items with `status: ACTIVE` should be displayed on the website
@@ -16,7 +16,7 @@ This document contains **ONLY GET endpoints** for the public website. These endp
 ### 1.1 Get All Banners (Filter for Website Display)
 
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/banner/get-all?itemType=BANNER&page=0&pageSize=100&sortBy=priority&sortOrder=ASC' \
+curl --location 'https://api.curebasket.com/backend/banner/get-all?itemType=BANNER&page=0&pageSize=100&sortBy=priority&sortOrder=ASC' \
 --header 'Accept: application/json'
 ```
 
@@ -69,7 +69,7 @@ curl --location 'https://java.api.curebasket.com/backend/banner/get-all?itemType
 }
 ```
 
-**Image URL:** `https://java.api.curebasket.com{files[0].docPath}`
+**Image URL:** `https://api.curebasket.com{files[0].docPath}`
 
 ### 1.2 Banner Display Algorithm
 
@@ -134,13 +134,13 @@ const getWebsiteBanners = (bannerResponse) => {
     type: banner.type,
     priority: banner.priority,
     imageUrl: banner.files[0]?.docPath
-      ? `https://java.api.curebasket.com${banner.files[0].docPath}`
+      ? `https://api.curebasket.com${banner.files[0].docPath}`
       : null
   }));
 };
 
 // Usage
-const response = await fetch('https://java.api.curebasket.com/backend/banner/get-all?itemType=BANNER&page=0&pageSize=100&sortBy=priority&sortOrder=ASC');
+const response = await fetch('https://api.curebasket.com/backend/banner/get-all?itemType=BANNER&page=0&pageSize=100&sortBy=priority&sortOrder=ASC');
 const data = await response.json();
 const bannersToDisplay = getWebsiteBanners(data);
 // bannersToDisplay will have maximum 3 banners with priority 1, 2, 3
@@ -165,7 +165,7 @@ const bannersToDisplay = getWebsiteBanners(data);
 
 ### 2.1 Get All Published Blogs
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=PUBLISHED&page=0&pageSize=100&sortBy=ID&sortOrder=DESC' \
+curl --location 'https://api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=PUBLISHED&page=0&pageSize=100&sortBy=ID&sortOrder=DESC' \
 --header 'Accept: application/json'
 ```
 
@@ -205,7 +205,7 @@ curl --location 'https://java.api.curebasket.com/backend/blog/get-all?itemType=B
 }
 ```
 
-**Image URL:** `https://java.api.curebasket.com{files[0].docPath}`
+**Image URL:** `https://api.curebasket.com{files[0].docPath}`
 
 **Query Parameters:**
 - `itemType`: `BLOG` (required)
@@ -234,7 +234,7 @@ If you see `totalRecords: 5` but only 3 items in `content`, check:
 
 ### 3.1 Get All Active Medicines
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/medicines/getAllMedicines?page=0&size=20&sortBy=name' \
+curl --location 'https://api.curebasket.com/backend/medicines/getAllMedicines?page=0&size=20&sortBy=name' \
 --header 'Accept: application/json'
 ```
 
@@ -269,7 +269,7 @@ curl --location 'https://java.api.curebasket.com/backend/medicines/getAllMedicin
 }
 ```
 
-**Image URL:** `https://java.api.curebasket.com{image}`
+**Image URL:** `https://api.curebasket.com{image}`
 
 **Query Parameters:**
 - `page`: Page number (0-based, default: 0)
@@ -286,7 +286,7 @@ curl --location 'https://java.api.curebasket.com/backend/medicines/getAllMedicin
 
 ### 4.1 Get All Active Categories
 ```bash
-curl --location 'https://java.api.curebasket.com/backend/catalog/categories?itemType=PRODUCT&status=ACTIVE&page=0&pageSize=50&sortBy=ID&sortOrder=ASC' \
+curl --location 'https://api.curebasket.com/backend/catalog/categories?itemType=PRODUCT&status=ACTIVE&page=0&pageSize=50&sortBy=ID&sortOrder=ASC' \
 --header 'Accept: application/json'
 ```
 
@@ -322,7 +322,7 @@ curl --location 'https://java.api.curebasket.com/backend/catalog/categories?item
 }
 ```
 
-**Image URL:** `https://java.api.curebasket.com{files[0].docPath}`
+**Image URL:** `https://api.curebasket.com{files[0].docPath}`
 
 **Query Parameters:**
 - `itemType`: `PRODUCT` (required)
@@ -366,14 +366,14 @@ All images should be constructed using the base URL:
 
 ```javascript
 // For Banner, Blog, Category (from files array)
-const imageUrl = `https://java.api.curebasket.com${item.files[0]?.docPath}`;
+const imageUrl = `https://api.curebasket.com${item.files[0]?.docPath}`;
 
 // For Medicine (direct image field)
-const imageUrl = `https://java.api.curebasket.com${medicine.image}`;
+const imageUrl = `https://api.curebasket.com${medicine.image}`;
 
 // Fallback if no image
 const imageUrl = item.files?.[0]?.docPath 
-  ? `https://java.api.curebasket.com${item.files[0].docPath}`
+  ? `https://api.curebasket.com${item.files[0].docPath}`
   : '/default-image.jpg';
 ```
 
@@ -387,7 +387,7 @@ const imageUrl = item.files?.[0]?.docPath
 // Fetch Website Banners (Maximum 3 banners with priority 1, 2, 3)
 const fetchWebsiteBanners = async () => {
   const response = await fetch(
-    'https://java.api.curebasket.com/backend/banner/get-all?itemType=BANNER&page=0&pageSize=100&sortBy=priority&sortOrder=ASC',
+    'https://api.curebasket.com/backend/banner/get-all?itemType=BANNER&page=0&pageSize=100&sortBy=priority&sortOrder=ASC',
     {
       headers: {
         'Accept': 'application/json'
@@ -437,7 +437,7 @@ const fetchWebsiteBanners = async () => {
     type: banner.type,
     priority: banner.priority,
     imageUrl: banner.files[0]?.docPath
-      ? `https://java.api.curebasket.com${banner.files[0].docPath}`
+      ? `https://api.curebasket.com${banner.files[0].docPath}`
       : null
   }));
 };
@@ -445,7 +445,7 @@ const fetchWebsiteBanners = async () => {
 // Fetch Published Blogs (with enabled check)
 const fetchPublishedBlogs = async (page = 0, pageSize = 100) => {
   const response = await fetch(
-    `https://java.api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=PUBLISHED&page=${page}&pageSize=${pageSize}&sortBy=ID&sortOrder=DESC`,
+    `https://api.curebasket.com/backend/blog/get-all?itemType=BLOG&status=PUBLISHED&page=${page}&pageSize=${pageSize}&sortBy=ID&sortOrder=DESC`,
     {
       headers: {
         'Accept': 'application/json'
@@ -466,7 +466,7 @@ const fetchPublishedBlogs = async (page = 0, pageSize = 100) => {
     const blogsWithImages = publishedBlogs.map(blog => ({
       ...blog,
       imageUrl: blog.files?.[0]?.docPath
-        ? `https://java.api.curebasket.com${blog.files[0].docPath}`
+        ? `https://api.curebasket.com${blog.files[0].docPath}`
         : '/default-blog.jpg'
     }));
     
@@ -485,7 +485,7 @@ const fetchPublishedBlogs = async (page = 0, pageSize = 100) => {
 // Fetch Active Medicines
 const fetchActiveMedicines = async (page = 0, size = 20) => {
   const response = await fetch(
-    `https://java.api.curebasket.com/backend/medicines/getAllMedicines?page=${page}&size=${size}&sortBy=name`,
+    `https://api.curebasket.com/backend/medicines/getAllMedicines?page=${page}&size=${size}&sortBy=name`,
     {
       headers: {
         'Accept': 'application/json'
@@ -505,7 +505,7 @@ const fetchActiveMedicines = async (page = 0, size = 20) => {
     const medicinesWithImages = activeMedicines.map(medicine => ({
       ...medicine,
       imageUrl: medicine.image
-        ? `https://java.api.curebasket.com${medicine.image}`
+        ? `https://api.curebasket.com${medicine.image}`
         : '/default-medicine.jpg'
     }));
     
@@ -521,7 +521,7 @@ const fetchActiveMedicines = async (page = 0, size = 20) => {
 // Fetch Active Categories
 const fetchActiveCategories = async () => {
   const response = await fetch(
-    'https://java.api.curebasket.com/backend/catalog/categories?itemType=PRODUCT&status=ACTIVE&page=0&pageSize=50&sortBy=ID&sortOrder=ASC',
+    'https://api.curebasket.com/backend/catalog/categories?itemType=PRODUCT&status=ACTIVE&page=0&pageSize=50&sortBy=ID&sortOrder=ASC',
     {
       headers: {
         'Accept': 'application/json'
@@ -541,7 +541,7 @@ const fetchActiveCategories = async () => {
     const categoriesWithImages = activeCategories.map(category => ({
       ...category,
       imageUrl: category.files?.[0]?.docPath
-        ? `https://java.api.curebasket.com${category.files[0].docPath}`
+        ? `https://api.curebasket.com${category.files[0].docPath}`
         : '/default-category.jpg'
     }));
     

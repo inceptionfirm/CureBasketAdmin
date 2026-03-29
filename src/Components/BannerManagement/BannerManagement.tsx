@@ -57,8 +57,8 @@ const BannerManagement: React.FC = () => {
   });
 
   // Helper function to normalize image URLs (add base URL if relative)
-  // Images are served from https://java.api.curebasket.com (without /backend)
-  // Example: "/files/CATALOG_ITEM/image.png" -> "https://java.api.curebasket.com/files/CATALOG_ITEM/image.png"
+  // Images are served from https://api.curebasket.com (without /backend)
+  // Example: "/files/CATALOG_ITEM/image.png" -> "https://api.curebasket.com/files/CATALOG_ITEM/image.png"
   const normalizeImageUrl = (imageUrl: string): string => {
     if (!imageUrl || imageUrl.trim() === '') return '';
     
@@ -68,7 +68,7 @@ const BannerManagement: React.FC = () => {
     }
     
     // Base URL for images (without /backend)
-    const imageBaseURL = 'https://java.api.curebasket.com';
+    const imageBaseURL = 'https://api.curebasket.com';
 
     // If path starts with /, append directly, otherwise add /
     if (imageUrl.startsWith('/')) {

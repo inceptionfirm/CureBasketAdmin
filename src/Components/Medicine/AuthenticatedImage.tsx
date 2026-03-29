@@ -56,8 +56,13 @@ const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
       return;
     }
 
-    // If it's a full URL from java.api.curebasket.com, use it directly (no auth needed)
-    if (src.startsWith('https://java.api.curebasket.com') || src.startsWith('http://java.api.curebasket.com')) {
+    // Full CDN/API host URLs: use directly (no auth needed). Legacy java.* host still supported.
+    if (
+      src.startsWith('https://api.curebasket.com') ||
+      src.startsWith('http://api.curebasket.com') ||
+      src.startsWith('https://java.api.curebasket.com') ||
+      src.startsWith('http://java.api.curebasket.com')
+    ) {
       setImageUrl(src);
       setLoading(false);
       setError(false);
