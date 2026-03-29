@@ -4,7 +4,7 @@ Only two things you need to build now: Login and Users.
 
 Basics
 
-- Base URL: `${baseURL}/${version}` (e.g. `https://api.curebasket.com/v1`)
+- Base URL: `${baseURL}/${version}`. For CureBasket this app uses the Java backend at `https://java.api.curebasket.com/backend` (see `src/config/apiConfig.ts`). The host `https://api.curebasket.com` is a separate public landing page, not the REST API base used here.
 - Headers: `Content-Type: application/json`, `Accept: application/json`
 - Auth: send `Authorization: Bearer <token>` for all /users routes
 - Standard responses:
