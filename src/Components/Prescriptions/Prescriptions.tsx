@@ -53,29 +53,67 @@ const Prescriptions: React.FC = () => {
   const mapApiPrescriptionToAdmin = (apiPrescription: Prescription | any): AdminPrescription => {
     // Extract medications from mainAttributes
     const medications: Medication[] = [];
+    const isMedicationAttr = (attr: any): boolean => {
+      const n = (attr?.name || '').toLowerCase();
+      if (n.includes('medication') || n.includes('medicine')) return true;
+      if (typeof attr?.medicineId === 'number' && attr.medicineId > 0) return true;
+      if (attr?.medicine && typeof attr.medicine === 'object') return true;
+      const subs = attr?.subAttributes || [];
+      return subs.some(
+        (sa: any) =>
+          String(sa?.name || '')
+            .toLowerCase()
+            .match(/dosage|quantity|frequency/) && (sa?.value != null && String(sa.value).trim() !== '')
+      );
+    };
+
     if (apiPrescription.mainAttributes && Array.isArray(apiPrescription.mainAttributes)) {
       apiPrescription.mainAttributes.forEach((attr: any, index: number) => {
-        // Check if this attribute represents a medication
-        if (attr.name && (attr.name.toLowerCase().includes('medication') || attr.name.toLowerCase().includes('medicine'))) {
-          // Extract medication details from subAttributes or value
-          const subAttrs = attr.subAttributes || [];
-          const medicineName = attr.value || attr.name || `Medicine ${index + 1}`;
-          const dosage = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('dosage'))?.value || '';
-          const frequency = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('frequency'))?.value || '';
-          const duration = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('duration'))?.value || '';
-          const quantity = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('quantity'))?.value || '';
-          const instructions = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('instruction'))?.value || '';
+        if (!isMedicationAttr(attr)) return;
+        const subAttrs = attr.subAttributes || [];
+        const medicineName =
+          attr.value ||
+          attr.medicine?.name ||
+          attr.name ||
+          `Medicine ${index + 1}`;
+        const dosage = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('dosage'))?.value || '';
+        const frequency = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('frequency'))?.value || '';
+        const duration = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('duration'))?.value || '';
+        const quantity = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('quantity'))?.value || '';
+        const instructions = subAttrs.find((sa: any) => sa.name?.toLowerCase().includes('instruction'))?.value || '';
+        const medicineId =
+          typeof attr.medicineId === 'number'
+            ? attr.medicineId
+            : typeof attr.medicine?.id === 'number'
+              ? attr.medicine.id
+              : undefined;
 
-          medications.push({
-            id: String(attr.id || `med-${index}`),
-            name: medicineName,
-            dosage,
-            frequency,
-            duration,
-            quantity,
-            instructions,
-          } as Medication);
-        }
+        medications.push({
+          id: String(attr.id || attr.serialId || `med-${index}`),
+          name: medicineName,
+          medicineId,
+          dosage,
+          frequency,
+          duration,
+          quantity,
+          instructions,
+        } as Medication);
+      });
+    }
+
+    const apiMedicinesFlat = apiPrescription.medicines || apiPrescription.mappedMedicines || apiPrescription.mappedmedicines;
+    if (Array.isArray(apiMedicinesFlat) && medications.length === 0) {
+      apiMedicinesFlat.forEach((m: any, index: number) => {
+        medications.push({
+          id: String(m.id ?? m.serialId ?? `med-${index}`),
+          name: m.name || m.medicineName || 'Medicine',
+          medicineId: typeof m.medicineId === 'number' ? m.medicineId : m.medicine?.id,
+          dosage: m.dosage ?? '',
+          frequency: m.frequency ?? '',
+          duration: m.duration ?? '',
+          quantity: m.quantity != null ? String(m.quantity) : '',
+          instructions: m.instructions ?? '',
+        } as Medication);
       });
     }
     
@@ -133,7 +171,12 @@ const Prescriptions: React.FC = () => {
       notes: apiPrescription.note || apiPrescription.notes || '',
       uploadedFiles,
       medications,
-      amount: apiPrescription.amount || undefined,
+      amount:
+        apiPrescription.amount != null && Number(apiPrescription.amount) > 0
+          ? Number(apiPrescription.amount)
+          : apiPrescription.totalAmount != null && Number(apiPrescription.totalAmount) > 0
+            ? Number(apiPrescription.totalAmount)
+            : undefined,
       status: mappedStatus,
       transactionId: apiPrescription.transactionId || undefined,
       paymentScreenshot: apiPrescription.paymentScreenshot || undefined,
@@ -298,9 +341,15 @@ const Prescriptions: React.FC = () => {
         updated = await prescriptionService.getPrescriptionById(prescriptionIdNum);
       }
       const mapped = mapApiPrescriptionToAdmin(updated);
-      setPrescriptions(prev => prev.map(p => (p.id === prescriptionId ? mapped : p)));
+      // If API shape doesn't populate medications, keep rows we just saved (otherwise Approve stays disabled).
+      let medications = mapped.medications;
+      if (medications.length === 0 && meds.length > 0) {
+        medications = meds.filter((m) => m.medicineId != null && m.medicineId > 0);
+      }
+      const merged = { ...mapped, medications };
+      setPrescriptions(prev => prev.map(p => (p.id === prescriptionId ? merged : p)));
       if (selectedPrescription?.id === prescriptionId) {
-        setSelectedPrescription(mapped);
+        setSelectedPrescription(merged);
       }
     } catch (err) {
       let msg = err instanceof Error ? err.message : String(err);

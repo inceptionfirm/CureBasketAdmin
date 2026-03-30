@@ -66,19 +66,28 @@ const AdminPrescriptionDetails: React.FC<AdminPrescriptionDetailsProps> = ({
     setLocalAmount(prescription.amount);
   }, [prescription.amount]);
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (prescription.medications.length === 0) {
-      alert('Please add at least one medication before approving');
+      alert('Add at least one medication, pick it from the list, and click "Save medicine" first.');
       return;
     }
-    if (!localAmount || localAmount <= 0) {
-      alert('Please add a valid amount before approving');
+    const amountToUse =
+      prescription.amount && prescription.amount > 0 ? prescription.amount : localAmount;
+    if (!amountToUse || amountToUse <= 0) {
+      alert('Enter a valid amount (use Set amount below), then approve.');
       return;
     }
-    // TODO: API call to approve prescription
-    // await prescriptionService.updatePrescription(prescription.id, { status: 'approved' });
-    onStatusChange(prescription.id, 'approved');
-    alert('✅ Prescription approved! Email sent to customer (placeholder).');
+    try {
+      // Persist amount if only entered locally; parent may auto-approve when pending + amount save.
+      if (!prescription.amount || prescription.amount <= 0) {
+        await onAmountChange(prescription.id, amountToUse);
+        return;
+      }
+      await onStatusChange(prescription.id, 'approved');
+      alert('Prescription approved.');
+    } catch {
+      /* parent / API surfaces errors */
+    }
   };
 
   const handleVerifyPayment = () => {
@@ -316,7 +325,23 @@ const AdminPrescriptionDetails: React.FC<AdminPrescriptionDetailsProps> = ({
                       )}
                     </>
                   ) : (
-                    <span className="amount-missing">Save medicines to see calculated amount</span>
+                    <div className="amount-missing-wrap">
+                      <span className="amount-missing">
+                        Save medicines to load a calculated total, or set the amount manually.
+                      </span>
+                      {statusConfig.canAddAmount && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLocalAmount(prescription.amount ?? undefined);
+                            setEditingAmount(true);
+                          }}
+                          className="btn-edit-amount"
+                        >
+                          Set amount
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -343,14 +368,19 @@ const AdminPrescriptionDetails: React.FC<AdminPrescriptionDetailsProps> = ({
                 {statusConfig.canApprove && (
                   <button
                     type="button"
-                    onClick={handleApprove}
+                    onClick={() => void handleApprove()}
                     className="btn-approve"
-                    disabled={prescription.medications.length === 0 || !prescription.amount || prescription.amount <= 0}
+                    disabled={
+                      prescription.medications.length === 0 ||
+                      (!(prescription.amount && prescription.amount > 0) &&
+                        !(localAmount != null && localAmount > 0))
+                    }
                     title={
                       prescription.medications.length === 0
-                        ? 'Add medications first'
-                        : !prescription.amount || prescription.amount <= 0
-                          ? 'Add amount first'
+                        ? 'Add medications and save first'
+                        : !(prescription.amount && prescription.amount > 0) &&
+                            !(localAmount != null && localAmount > 0)
+                          ? 'Enter amount (Set amount) first'
                           : 'Approve prescription'
                     }
                   >
