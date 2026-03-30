@@ -1,5 +1,6 @@
 // API Client - Centralized API management for all modules
 import { clientConfigManager } from '../config/clientConfig';
+import { getBearerTokenFromStorage } from '../utils/authStorage';
 
 export interface APIResponse<T = any> {
   success: boolean;
@@ -120,9 +121,9 @@ class APIClient {
     return url.toString();
   }
 
-  // Get auth token
+  // Get auth token (same keys as authService + nested flycanary_auth)
   private getAuthToken(): string | null {
-    return localStorage.getItem('flycanary_token') || localStorage.getItem('authToken');
+    return getBearerTokenFromStorage();
   }
 
   // Build headers
@@ -154,6 +155,9 @@ class APIClient {
     // Skip auth header for login endpoint (we're not authenticated yet)
     const skipAuth = endpoint.includes('/auth/login');
     const requestHeaders = this.buildHeaders(headers, skipAuth);
+    if (import.meta.env.DEV && !skipAuth && !this.getAuthToken()) {
+      console.warn('🔑 No auth token in storage for:', endpoint);
+    }
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -201,12 +205,21 @@ class APIClient {
       if (isFormData) {
         delete requestHeaders['Content-Type'];
       }
+
+      // Re-apply Bearer after all header mutations (guards against empty/overridden Authorization from config).
+      if (!skipAuth) {
+        const token = this.getAuthToken();
+        if (token) {
+          requestHeaders['Authorization'] = `Bearer ${token}`;
+        }
+      }
       
       const response = await fetch(url, {
         method,
         headers: requestHeaders,
         body,
         signal: controller.signal,
+        mode: 'cors',
       });
       
       // Only log errors or non-GET requests

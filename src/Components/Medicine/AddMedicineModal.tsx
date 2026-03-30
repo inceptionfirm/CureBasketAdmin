@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Medicine, medicineService } from '../../services/modules/medicineService';
 import { categoryService, Category } from '../../services/categoryService';
+import { COMMON_MEDICINE_FORMS, mergeMedicineFormOptions } from '../../constants/medicineForms';
 import './AddMedicineModal.css';
 
 interface AddMedicineModalProps {
@@ -83,7 +84,7 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
     description: '',
     category: '',
     manufacturer: '',
-    form: '',
+    form: 'Tablet',
     price: 0,
     stock: 0,
     sku: '',
@@ -115,8 +116,7 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
   const [medicineSaved, setMedicineSaved] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
-  const [medicineForms, setMedicineForms] = useState<string[]>([]);
-  const [loadingMedicineForms, setLoadingMedicineForms] = useState(false);
+  const [medicineForms, setMedicineForms] = useState<string[]>(() => [...COMMON_MEDICINE_FORMS]);
 
   // Fetch categories from API
   useEffect(() => {
@@ -154,15 +154,11 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
     const loadMedicineForms = async () => {
       if (!isOpen) return;
       try {
-        setLoadingMedicineForms(true);
         const forms = await medicineService.getAllMedicineForms();
-        setMedicineForms(forms || []);
+        setMedicineForms(mergeMedicineFormOptions(forms));
       } catch (error) {
         console.error('❌ AddMedicineModal: Failed to load medicine forms:', error);
-        // Fallback to common forms if API not live
-        setMedicineForms(['Tablet', 'Capsule', 'Syrup', 'Injection', 'Cream', 'Drops', 'Other']);
-      } finally {
-        setLoadingMedicineForms(false);
+        setMedicineForms(mergeMedicineFormOptions(null));
       }
     };
     if (isOpen) loadMedicineForms();
@@ -251,7 +247,7 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
         description: '',
         category: '',
         manufacturer: '',
-        form: '',
+        form: 'Tablet',
         price: 0,
         stock: 0,
         sku: '',
@@ -582,11 +578,10 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
                     value={formData.form}
                     onChange={handleInputChange}
                     className={`form-select ${errors.form ? 'error' : ''}`}
-                    disabled={loadingMedicineForms}
                   >
-                    <option value="">{loadingMedicineForms ? 'Loading forms...' : 'Select Form'}</option>
-                    {medicineForms.map((form) => (
-                      <option key={form} value={form}>{form}</option>
+                    <option value="">Select form (dosage type)</option>
+                    {medicineForms.map((formOption) => (
+                      <option key={formOption} value={formOption}>{formOption}</option>
                     ))}
                   </select>
                   {errors.form && <span className="error-message">{errors.form}</span>}

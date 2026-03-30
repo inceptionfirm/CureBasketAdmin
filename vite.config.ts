@@ -7,7 +7,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://api.curebasket.com/backend',
+        // Use HTTPS directly. If target were http://, the API often returns 301 → https://; the browser would
+        // follow that redirect and drop the Authorization header (Bearer), causing 401 on medicines etc.
+        target: 'https://api.curebasket.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
         secure: true,
@@ -18,7 +20,8 @@ export default defineConfig({
           proxy.on('proxyReq', (proxyReq, req, _res) => {
             // Only log non-GET requests to reduce noise
             if (req.method !== 'GET') {
-              console.log('📤 Proxy:', req.method, req.url, '→', 'https://api.curebasket.com/backend' + req.url);
+              const pathOnly = req.url?.replace(/^\/api/, '') || '';
+              console.log('📤 Proxy:', req.method, req.url, '→', 'https://api.curebasket.com' + pathOnly);
             }
           });
           // Track logged 404s to avoid spam

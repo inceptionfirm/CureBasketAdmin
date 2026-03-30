@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { medicineService, Medicine, MedicineListParams } from '../../services/modules/medicineService';
 import { fileUploadService } from '../../services/fileUploadService';
-import { clientConfigManager } from '../../config/clientConfig';
+import { useAuth } from '../../contexts/AuthContext';
 import AddMedicineModal from './AddMedicineModal';
 import AuthenticatedImage from './AuthenticatedImage';
 import './MedicinePage.css';
 
 const MedicinePage: React.FC = () => {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -246,8 +247,9 @@ const MedicinePage: React.FC = () => {
   }, [sortBy]); // Remove pagination from dependencies - we'll do client-side pagination
 
   useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
     loadMedicines();
-  }, [loadMedicines]);
+  }, [loadMedicines, authLoading, isAuthenticated]);
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);

@@ -24,14 +24,14 @@ export interface ClientFeatures {
   enableNotifications: boolean;
   enableMultiLanguage: boolean;
   enableMultiCurrency: boolean;
-  
+
   // Admin features
   enableUserManagement: boolean;
   enableRoleManagement: boolean;
   enableAuditLogs: boolean;
   enableBackup: boolean;
   enableAPI: boolean;
-  
+
   // Pharmacy specific
   enablePrescriptionUpload: boolean;
   enableDoctorVerification: boolean;
@@ -47,18 +47,18 @@ export interface ClientModules {
   orders: boolean;
   customers: boolean;
   inventory: boolean;
-  
+
   // Pharmacy modules
   prescriptions: boolean;
   medicines: boolean;
   categories: boolean;
   manufacturers: boolean;
-  
+
   // Content modules
   blogs: boolean;
   banners: boolean;
   notifications: boolean;
-  
+
   // System modules
   users: boolean;
   roles: boolean;
@@ -164,8 +164,8 @@ export const DEFAULT_CLIENT_CONFIG: ClientConfig = {
     reports: true,
   },
   api: {
-    // Always use the actual backend URL
-    baseURL: 'https://api.curebasket.com/backend',
+    // Production: call API directly. Dev: use same-origin `/api/` so Vite proxies to the server (avoids CORS; Postman does not use CORS).
+    baseURL: import.meta.env.DEV ? '/api/' : 'https://api.curebasket.com/',
     version: '',
     endpoints: {
       auth: '/auth',
@@ -214,8 +214,30 @@ class ClientConfigManager {
     try {
       const stored = localStorage.getItem('clientConfig');
       if (stored) {
-        const parsed = JSON.parse(stored);
-        this.config = { ...this.config, ...parsed };
+        const parsed = JSON.parse(stored) as Partial<ClientConfig>;
+        // Shallow merge replaces entire `api` and can drop baseURL/headers/endpoints — deep-merge api only.
+        const { api: parsedApi, ...rest } = parsed;
+        this.config = { ...this.config, ...rest };
+        if (parsedApi && typeof parsedApi === 'object') {
+          this.config.api = {
+            ...DEFAULT_CLIENT_CONFIG.api,
+            ...this.config.api,
+            ...parsedApi,
+            headers: {
+              ...DEFAULT_CLIENT_CONFIG.api.headers,
+              ...(this.config.api?.headers || {}),
+              ...(parsedApi.headers || {}),
+            },
+          };
+        }
+        // Dev-only relative /api/ must not stick on production (wrong host, auth issues).
+        if (
+          import.meta.env.PROD &&
+          typeof this.config.api.baseURL === 'string' &&
+          this.config.api.baseURL.startsWith('/')
+        ) {
+          this.config.api.baseURL = DEFAULT_CLIENT_CONFIG.api.baseURL;
+        }
       }
     } catch (error) {
       console.warn('Failed to load client config from storage:', error);

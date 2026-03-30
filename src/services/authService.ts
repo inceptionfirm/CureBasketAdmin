@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { getBearerTokenFromStorage } from '../utils/authStorage';
 import { User, AuthData, LoginResponse, RegisterData, RegisterResponse } from '../types';
 
 interface BackendUser {
@@ -80,8 +81,7 @@ class AuthService {
   async login(email: string, password: string, rememberMe: boolean = false): Promise<LoginResponse> {
     try {
       // apiClient handles baseURL, just pass the endpoint path
-      // Backend expects only email and password (rememberMe is handled client-side)
-      const loginPayload = { email, password };
+      const loginPayload = { email, password, rememberMe };
       
       console.log('🔐 Login Request:', {
         endpoint: '/auth/login',
@@ -268,7 +268,7 @@ class AuthService {
 
   getToken(): string | null {
     try {
-      return localStorage.getItem(this.tokenKey) || localStorage.getItem('authToken');
+      return getBearerTokenFromStorage();
     } catch (error) {
       console.error('Get token error:', error);
       return null;
