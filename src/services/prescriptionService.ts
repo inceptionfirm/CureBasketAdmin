@@ -67,8 +67,24 @@ export interface PrescriptionListResponse {
   };
 }
 
+/** Use VITE_PRESCRIPTIONS_ROOT=backend when your API lives under /backend/prescriptions (see API_CURL_COMMANDS.md). */
+function getPrescriptionsBasePath(): string {
+  const raw = import.meta.env.VITE_PRESCRIPTIONS_ROOT as string | undefined;
+  if (raw === undefined || raw === null) {
+    return '/prescriptions';
+  }
+  const t = String(raw).trim();
+  if (t === '' || t === 'false' || t === '0') {
+    return '/prescriptions';
+  }
+  const segment = t.replace(/^\/+|\/+$/g, '');
+  return segment ? `/${segment}/prescriptions` : '/prescriptions';
+}
+
 class PrescriptionService {
-  private baseEndpoint = '/prescriptions';
+  private get baseEndpoint(): string {
+    return getPrescriptionsBasePath();
+  }
 
   // 11. Create New Prescription
   // POST /prescriptions/add-prescription
@@ -146,7 +162,15 @@ class PrescriptionService {
       throw new Error(`Invalid prescription ID: ${id}`);
     }
     
-    const response = await apiClient.post<Prescription>(`${this.baseEndpoint}/update-prescription/${prescriptionId}`, updates);
+    const body = {
+      itemType: 'PRESCRIPTION' as const,
+      ...updates,
+    };
+
+    const response = await apiClient.post<Prescription>(
+      `${this.baseEndpoint}/update-prescription/${prescriptionId}`,
+      body
+    );
 
     if (!response.success) {
       throw new Error(errorToMessage(response.error ?? response.message) || 'Failed to update prescription');

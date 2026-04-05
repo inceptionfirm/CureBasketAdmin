@@ -8,6 +8,29 @@ import { medicineService } from '../../services/modules/medicineService';
 import './Prescriptions.css';
 import '../../styles/global-buttons.css';
 
+/** Backend update-prescription expects a full DTO (see Java curl); partial { status } alone can break toCatalogItemDTO. */
+function buildPrescriptionUpdatePayload(
+  p: AdminPrescription,
+  partial: Record<string, unknown> = {}
+): Record<string, unknown> {
+  const patientId = p.apiPatientId ?? p.patient.email ?? '';
+  const base: Record<string, unknown> = {
+    prescriptionNumber: p.prescriptionNumber,
+    itemType: 'PRESCRIPTION',
+    patientName: p.patient.name,
+    patientId,
+    doctorName: p.doctorName,
+    doctorId: p.doctorId ?? '',
+    note: p.notes ?? '',
+    diagnosis: p.diagnosis ?? '',
+    priority: p.priority || 'HIGH',
+  };
+  if (p.amount != null && Number(p.amount) > 0) {
+    base.amount = Number(p.amount);
+  }
+  return { ...base, ...partial };
+}
+
 /**
  * ADMIN PRESCRIPTION MANAGEMENT COMPONENT
  * 
@@ -101,6 +124,27 @@ const Prescriptions: React.FC = () => {
       });
     }
 
+    const prescribed = apiPrescription.prescribedMedicines;
+    if (Array.isArray(prescribed) && medications.length === 0) {
+      prescribed.forEach((row: any, index: number) => {
+        medications.push({
+          id: String(row.serialId ?? row.id ?? `med-${index}`),
+          name: row.medicine?.name || row.medicineName || `Medicine ${index + 1}`,
+          medicineId:
+            typeof row.medicineId === 'number'
+              ? row.medicineId
+              : typeof row.medicine?.id === 'number'
+                ? row.medicine.id
+                : undefined,
+          dosage: row.dosage != null ? String(row.dosage) : '',
+          frequency: row.frequency != null ? String(row.frequency) : '',
+          duration: row.duration != null ? String(row.duration) : '',
+          quantity: row.quantity != null ? String(row.quantity) : '',
+          instructions: row.instructions ?? '',
+        } as Medication);
+      });
+    }
+
     const apiMedicinesFlat = apiPrescription.medicines || apiPrescription.mappedMedicines || apiPrescription.mappedmedicines;
     if (Array.isArray(apiMedicinesFlat) && medications.length === 0) {
       apiMedicinesFlat.forEach((m: any, index: number) => {
@@ -156,16 +200,22 @@ const Prescriptions: React.FC = () => {
 
     // Extract patient info - API has patientName, might have patientId
     const patientName = apiPrescription.patientName || 'Unknown Patient';
-    const patientId = apiPrescription.patientId || '';
-    
+    const rawPatientId = apiPrescription.patientId != null ? String(apiPrescription.patientId) : '';
+    const patientEmailGuess =
+      apiPrescription.patientEmail ||
+      (rawPatientId.includes('@') ? rawPatientId : undefined);
+
     return {
       id: String(apiPrescription.id),
       prescriptionNumber: apiPrescription.prescriptionNumber || `RX-${apiPrescription.id}`,
       patient: {
         name: patientName,
-        email: apiPrescription.patientEmail || undefined,
+        email: patientEmailGuess,
         phone: apiPrescription.patientPhone || undefined
       },
+      apiPatientId: rawPatientId || undefined,
+      doctorId: apiPrescription.doctorId != null ? String(apiPrescription.doctorId) : '',
+      priority: apiPrescription.priority || 'HIGH',
       doctorName: apiPrescription.doctorName || 'Unknown Doctor',
       diagnosis: apiPrescription.diagnosis || '',
       notes: apiPrescription.note || apiPrescription.notes || '',
@@ -263,6 +313,14 @@ const Prescriptions: React.FC = () => {
   // Handle status change
   const handleStatusChange = async (prescriptionId: string, newStatus: PrescriptionStatus) => {
     try {
+      const p =
+        prescriptions.find((x) => x.id === prescriptionId) ??
+        (selectedPrescription?.id === prescriptionId ? selectedPrescription : null);
+      if (!p) {
+        alert('Prescription not found in the list. Refresh and try again.');
+        return;
+      }
+
       // Map AdminPrescription status to API status
       const statusMap: Partial<Record<PrescriptionStatus, string>> = {
         pending: 'PENDING',
@@ -272,11 +330,11 @@ const Prescriptions: React.FC = () => {
         verified: 'VERIFIED',
       };
       const apiStatus = statusMap[newStatus] || 'PENDING';
-      
-      // Update via API
-      await prescriptionService.updatePrescription(Number(prescriptionId), { 
-        status: apiStatus as any 
-      });
+
+      await prescriptionService.updatePrescription(
+        Number(prescriptionId),
+        buildPrescriptionUpdatePayload(p, { status: apiStatus }) as any
+      );
         
       // Update local state
       setPrescriptions(prev =>
@@ -295,7 +353,12 @@ const Prescriptions: React.FC = () => {
       setStats(calculateStats(updatedPrescriptions));
     } catch (err) {
       console.error('❌ Error updating prescription status:', err);
-      alert('Failed to update prescription status. Please try again.');
+      const detail = err instanceof Error ? err.message : String(err);
+      alert(
+        detail && detail !== '[object Object]'
+          ? `Could not update status: ${detail}`
+          : 'Could not update prescription status. Check the browser console or network tab for details.'
+      );
     }
   };
 
@@ -391,13 +454,22 @@ const Prescriptions: React.FC = () => {
   // Handle amount change (only call API when amount actually changed, not on view details).
   // After saving amount, approve prescription so backend can send approve email to customer.
   const handleAmountChange = async (prescriptionId: string, amount: number) => {
-    const current = prescriptions.find((p) => p.id === prescriptionId);
-    if (current && current.amount === amount) {
+    const current =
+      prescriptions.find((p) => p.id === prescriptionId) ??
+      (selectedPrescription?.id === prescriptionId ? selectedPrescription : undefined);
+    if (!current) {
+      alert('Prescription not found. Refresh and try again.');
+      return;
+    }
+    if (current.amount === amount) {
       return;
     }
 
     try {
-      await prescriptionService.updatePrescription(Number(prescriptionId), { amount });
+      await prescriptionService.updatePrescription(
+        Number(prescriptionId),
+        buildPrescriptionUpdatePayload(current, { amount: Number(amount) }) as any
+      );
 
       setPrescriptions(prev =>
         prev.map(p => (p.id === prescriptionId ? { ...p, amount } : p))
@@ -413,7 +485,12 @@ const Prescriptions: React.FC = () => {
       }
     } catch (err) {
       console.error('❌ Error updating amount:', err);
-      alert('Failed to update amount. Please try again.');
+      const detail = err instanceof Error ? err.message : String(err);
+      alert(
+        detail && detail !== '[object Object]'
+          ? `Could not update amount: ${detail}`
+          : 'Could not update amount. Check the console or network tab for details.'
+      );
     }
   };
 

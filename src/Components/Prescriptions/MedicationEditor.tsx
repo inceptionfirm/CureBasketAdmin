@@ -280,7 +280,7 @@ const MedicationEditor: React.FC<MedicationEditorProps> = ({
                 className="btn-save-medication"
                 disabled={saving || localMedications.length === 0}
               >
-                {saving ? 'Saving...' : 'Save medicine'}
+                {saving ? 'Mapping…' : 'Map medicines'}
               </button>
             </div>
           )}

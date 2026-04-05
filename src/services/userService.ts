@@ -1,5 +1,8 @@
 import { apiClient } from './apiClient';
 import { clientConfigManager } from '../config/clientConfig';
+import { API_ENDPOINTS } from '../config/apiEndpoints';
+
+export type UserRoleBucket = 'superadmin' | 'admin' | 'customer' | 'website' | 'other';
 
 export interface User {
   id: string;
@@ -7,12 +10,26 @@ export interface User {
   lastName: string;
   email: string;
   phone?: string;
-  role: 'superadmin' | 'admin';
+  /** Normalized bucket for UI and filters */
+  role: UserRoleBucket;
+  /** Raw API role string, e.g. ADMIN, CUSTOMER */
+  apiRole?: string;
+  roleId?: number;
+  businessId?: number;
   status: 'active' | 'inactive';
   createdAt: string;
   updatedAt: string;
   lastLogin?: string;
   profileImage?: string;
+}
+
+export function mapApiRoleToBucket(apiRole: string | undefined): UserRoleBucket {
+  const r = (apiRole || '').toUpperCase();
+  if (r === 'SUPERADMIN') return 'superadmin';
+  if (r === 'ADMIN') return 'admin';
+  if (r === 'CUSTOMER') return 'customer';
+  if (r === 'WEBSITE_DEFAULT') return 'website';
+  return 'other';
 }
 
 export interface UserFilters {
@@ -102,12 +119,22 @@ class UserService {
       // }
       const data = response.data || {};
       const usersList = data.content || [];
-      
-      // Extract pagination info from backend response
-      const totalElements = data.totalElements || usersList.length;
-      const totalPages = data.totalPages || 1;
-      const currentPage = data.number !== undefined ? data.number : (queryParams.page || 0);
-      const pageSize = data.size || queryParams.size || 10;
+      const pageInfo = data.pageInfo || {};
+
+      // Spring page shape or { content, pageInfo: { pageNumber, pageSize, totalRecords, totalPages } }
+      const totalElements =
+        data.totalElements ??
+        pageInfo.totalRecords ??
+        pageInfo.totalElements ??
+        usersList.length;
+      const totalPages = data.totalPages ?? pageInfo.totalPages ?? 1;
+      const currentPage =
+        data.number !== undefined
+          ? data.number
+          : pageInfo.pageNumber !== undefined
+            ? pageInfo.pageNumber
+            : queryParams.page ?? 0;
+      const pageSize = data.size ?? pageInfo.pageSize ?? queryParams.size ?? 10;
       
       console.log(`✅ Successfully fetched users:`, usersList.length, 'total:', totalElements);
       
@@ -150,8 +177,8 @@ class UserService {
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
     
-    const roleStr = (user.role || '').toLowerCase();
-    const normalizedRole = roleStr === 'superadmin' ? 'superadmin' : 'admin';
+    const apiRoleStr = user.role || '';
+    const normalizedRole = mapApiRoleToBucket(apiRoleStr);
     const status = user.active === true ? 'active' : 'inactive';
 
     return {
@@ -160,7 +187,10 @@ class UserService {
       lastName: lastName,
       email: user.email || '',
       phone: user.phone || user.phoneNumber || '',
-      role: normalizedRole as 'admin' | 'superadmin',
+      role: normalizedRole,
+      apiRole: apiRoleStr,
+      roleId: user.roleId,
+      businessId: user.businessId,
       status: status as 'active' | 'inactive',
       profileImage: user.profileImage || user.profile_image || '',
       lastLogin: user.lastLogin || user.last_login || '',
@@ -234,8 +264,8 @@ class UserService {
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
     
-    const roleStr = (userData.role || '').toLowerCase();
-    const normalizedRole = roleStr === 'superadmin' ? 'superadmin' : 'admin';
+    const apiRoleStr = userData.role || '';
+    const normalizedRole = mapApiRoleToBucket(apiRoleStr);
     const status = userData.active === true ? 'active' : 'inactive';
 
     const mappedUser: User = {
@@ -244,7 +274,10 @@ class UserService {
       lastName: lastName,
       email: userData.email || payload.email,
       phone: userData.phone || userData.phoneNumber || payload.phoneNumber,
-      role: normalizedRole as 'admin' | 'superadmin',
+      role: normalizedRole,
+      apiRole: apiRoleStr,
+      roleId: userData.roleId,
+      businessId: userData.businessId,
       status: status as 'active' | 'inactive',
       profileImage: userData.profileImage || userData.profile_image || '',
       lastLogin: userData.lastLogin || userData.last_login || '',
@@ -299,8 +332,8 @@ class UserService {
     const firstName = nameParts[0] || payload.firstName || '';
     const lastName = nameParts.slice(1).join(' ') || payload.lastName || '';
     
-    const roleStr2 = (user.role || payload.role || '').toLowerCase();
-    const normalizedRole2 = roleStr2 === 'superadmin' ? 'superadmin' : 'admin';
+    const apiRoleStr2 = user.role || payload.role || '';
+    const normalizedRole2 = mapApiRoleToBucket(apiRoleStr2);
     const status = user.active !== undefined ? (user.active ? 'active' : 'inactive') : (payload.isActive ? 'active' : 'inactive');
 
     return {
@@ -309,7 +342,10 @@ class UserService {
       lastName: lastName,
       email: user.email || payload.email || '',
       phone: user.phone || user.phoneNumber || payload.phoneNumber || '',
-      role: normalizedRole2 as 'admin' | 'superadmin',
+      role: normalizedRole2,
+      apiRole: apiRoleStr2,
+      roleId: user.roleId ?? payload.roleId,
+      businessId: user.businessId ?? payload.businessId,
       status: status as 'active' | 'inactive',
       profileImage: user.profileImage || user.profile_image || '',
       lastLogin: user.lastLogin || user.last_login || '',
@@ -324,6 +360,30 @@ class UserService {
 
     if (!response.success) {
       throw new Error(response.error || 'Failed to delete user');
+    }
+  }
+
+  /**
+   * POST /user/change-email/{userId}?newEmail=...
+   */
+  async changeEmail(userId: string | number, newEmail: string): Promise<void> {
+    const id = String(userId);
+    const qs = new URLSearchParams({ newEmail: newEmail.trim() }).toString();
+    const response = await apiClient.post(`${API_ENDPOINTS.user.changeEmail(id)}?${qs}`);
+    if (!response.success) {
+      throw new Error(response.error || response.message || 'Failed to change email');
+    }
+  }
+
+  /**
+   * POST /user/change-password/{userId}?newPassword=...
+   */
+  async changePassword(userId: string | number, newPassword: string): Promise<void> {
+    const id = String(userId);
+    const qs = new URLSearchParams({ newPassword }).toString();
+    const response = await apiClient.post(`${API_ENDPOINTS.user.changePassword(id)}?${qs}`);
+    if (!response.success) {
+      throw new Error(response.error || response.message || 'Failed to change password');
     }
   }
 

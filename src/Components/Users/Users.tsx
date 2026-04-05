@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocale } from '../../contexts/LocaleContext';
-import { User, UserStats, userService } from '../../services/userService';
+import { User, UserStats, userService, mapApiRoleToBucket } from '../../services/userService';
 import { useAuth } from '../../contexts/AuthContext';
 import AddUserModal from './AddUserModal';
+import EditUserModal from './EditUserModal';
 import DataTable, { TableColumn } from '../core/DataTable';
 import businessService, { BusinessPayload } from '../../services/businessService';
 import './Users.css';
+
+type RoleFilter = 'all' | 'admin' | 'customer';
 
 const Users: React.FC = () => {
   const { t, formatNumber } = useLocale();
@@ -23,12 +26,17 @@ const Users: React.FC = () => {
   });
   const [pagination, setPagination] = useState({
     current: 1,
-    pageSize: 10,
+    pageSize: 100,
     total: 0,
+    totalPages: 1,
   });
   const [searchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
+  const [apiUserTotal, setApiUserTotal] = useState(0);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   // Use static data for now - no complex service layer needed
 
@@ -54,29 +62,32 @@ const Users: React.FC = () => {
         } : undefined
       });
 
-      // Map backend response to frontend User format
-      // Backend returns: { id, fullName, email, role, active, deleted, ... }
       const mappedUsers: User[] = (response.users || []).map((user: any) => {
-        // Parse fullName into firstName and lastName
-        const fullName = user.fullName || '';
-        const nameParts = fullName.split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
-        
-        // Normalize role: "SUPERADMIN" -> "superadmin", "ADMIN" -> "admin"
-        const roleStr = (user.role || '').toLowerCase();
-        const normalizedRole = roleStr === 'superadmin' ? 'superadmin' : 'admin';
-        
-        // Convert active boolean to status string
+        const fullName = (user.fullName || '').trim();
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+        const firstName =
+          (user.firstName != null && String(user.firstName).trim()) ||
+          nameParts[0] ||
+          '';
+        const lastName =
+          (user.lastName != null && String(user.lastName).trim()) ||
+          nameParts.slice(1).join(' ') ||
+          '';
+
+        const apiRole = user.role || '';
+        const normalizedRole = mapApiRoleToBucket(apiRole);
         const status = user.active === true ? 'active' : 'inactive';
-        
+
         return {
           id: String(user.id || ''),
-          firstName: firstName,
-          lastName: lastName,
+          firstName,
+          lastName,
           email: user.email || '',
           phone: user.phone || user.phoneNumber || '',
-          role: normalizedRole as 'admin' | 'superadmin',
+          role: normalizedRole,
+          apiRole,
+          roleId: user.roleId,
+          businessId: user.businessId,
           status: status as 'active' | 'inactive',
           profileImage: user.profileImage || user.profile_image || '',
           lastLogin: user.lastLogin || user.last_login || '',
@@ -86,9 +97,11 @@ const Users: React.FC = () => {
       });
 
       setUsers(mappedUsers);
+      const listTotal = response.pagination?.total ?? mappedUsers.length;
+      setApiUserTotal(listTotal);
       setPagination(prev => {
-        const newTotal = response.pagination?.total || mappedUsers.length;
-        const newTotalPages = response.pagination?.totalPages || Math.ceil(newTotal / prev.pageSize);
+        const newTotal = listTotal;
+        const newTotalPages = response.pagination?.totalPages || Math.max(1, Math.ceil(newTotal / prev.pageSize));
         
         // Only update if values actually changed to prevent infinite loops
         if (prev.total === newTotal && prev.totalPages === newTotalPages) {
@@ -127,7 +140,7 @@ const Users: React.FC = () => {
       }).length;
 
       const newStats = {
-        totalUsers: users.length,
+        totalUsers: apiUserTotal,
         activeUsers: activeCount,
         newThisMonth: newThisMonth,
         recentLogins: users.filter(u => u.lastLogin).length
@@ -148,7 +161,7 @@ const Users: React.FC = () => {
       // Fallback stats
       setStats(prev => {
         const fallbackStats = {
-          totalUsers: users.length,
+          totalUsers: apiUserTotal,
           activeUsers: users.filter(u => u.status === 'active').length,
           newThisMonth: 0,
           recentLogins: 0
@@ -164,19 +177,16 @@ const Users: React.FC = () => {
         return fallbackStats;
       });
     }
-  }, [users]);
+  }, [users, apiUserTotal]);
 
   // Load users on mount and when pagination/search changes
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
   
-  // Load stats separately, only when users array changes (not on every render)
   useEffect(() => {
-    if (users.length >= 0) { // Always recalculate stats when users change
     loadStats();
-    }
-  }, [users.length]); // Only depend on length to avoid infinite loops
+  }, [loadStats]);
 
   const handleAddUser = async (businessData: BusinessPayload): Promise<void> => {
     try {
@@ -247,9 +257,27 @@ const Users: React.FC = () => {
   };
 
   const handleEditUser = (user: User) => {
-    // TODO: Implement edit user modal
-    console.log('Edit user:', user);
+    setEditingUser(user);
+    setEditModalOpen(true);
   };
+
+  const displayedUsers = useMemo(() => {
+    if (roleFilter === 'admin') {
+      return users.filter((u) => u.role === 'admin' || u.role === 'superadmin');
+    }
+    if (roleFilter === 'customer') {
+      return users.filter((u) => u.role === 'customer');
+    }
+    return users;
+  }, [users, roleFilter]);
+
+  const tablePagination = useMemo(
+    () => ({
+      ...pagination,
+      total: roleFilter === 'all' ? pagination.total : displayedUsers.length,
+    }),
+    [pagination, roleFilter, displayedUsers.length]
+  );
 
   const handleDeleteUser = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
@@ -329,7 +357,11 @@ const Users: React.FC = () => {
             />
           ) : (
             <div className="user-avatar__placeholder">
-              {record.firstName.charAt(0)}{record.lastName.charAt(0)}
+              {(
+                record.firstName && record.lastName
+                  ? `${record.firstName[0]}${record.lastName[0]}`
+                  : (record.email || 'U').slice(0, 2)
+              ).toUpperCase()}
             </div>
           )}
         </div>
@@ -352,9 +384,9 @@ const Users: React.FC = () => {
       title: 'Role',
       dataIndex: 'role',
       filterable: true,
-      render: (value) => (
-        <span className="user-role">
-          {value}
+      render: (_, record) => (
+        <span className="user-role" title={record.apiRole}>
+          {record.apiRole || record.role}
         </span>
       ),
     },
@@ -496,13 +528,38 @@ const Users: React.FC = () => {
           </div>
           
           {bulkActions}
+
+          <div className="users-role-filter" role="group" aria-label="Filter by role">
+            <span className="users-role-filter__label">Show:</span>
+            <button
+              type="button"
+              className={`users-role-filter__btn ${roleFilter === 'all' ? 'users-role-filter__btn--active' : ''}`}
+              onClick={() => setRoleFilter('all')}
+            >
+              All users
+            </button>
+            <button
+              type="button"
+              className={`users-role-filter__btn ${roleFilter === 'admin' ? 'users-role-filter__btn--active' : ''}`}
+              onClick={() => setRoleFilter('admin')}
+            >
+              Admin
+            </button>
+            <button
+              type="button"
+              className={`users-role-filter__btn ${roleFilter === 'customer' ? 'users-role-filter__btn--active' : ''}`}
+              onClick={() => setRoleFilter('customer')}
+            >
+              Customer
+            </button>
+          </div>
           
           <DataTable
-            data={users}
+            data={displayedUsers}
             columns={columns}
             loading={loading}
             error={error || undefined}
-            pagination={pagination}
+            pagination={tablePagination}
             onSelectionChange={handleSelectionChange}
             rowKey="id"
             selectable
@@ -515,6 +572,16 @@ const Users: React.FC = () => {
         isOpen={isAddUserModalOpen}
         onClose={handleCloseAddUserModal}
         onSubmit={handleAddUser}
+      />
+
+      <EditUserModal
+        user={editingUser}
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingUser(null);
+        }}
+        onSaved={loadUsers}
       />
     </div>
   );

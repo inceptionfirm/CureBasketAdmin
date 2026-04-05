@@ -136,8 +136,6 @@ class MedicineService {
 
     queryParams.page = page;
     queryParams.size = size;
-    // Some backends also accept pageNumber (0-based)
-    queryParams.pageNumber = page;
 
     if (params.sortBy && params.sortBy.trim() !== '') {
       queryParams.sortBy = params.sortBy;
@@ -167,9 +165,10 @@ class MedicineService {
       throw new Error(errorMessage);
     }
 
-    const data = response.data ?? {} as any;
-    
-    // Try multiple possible response structures
+    // API shape: { success, data: { content: Medicine[], pageInfo: { pageNumber, pageSize, totalPages, totalRecords } } }
+    const raw = response.data ?? {} as any;
+    const data = raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? raw.data : raw;
+
     let content: any[] = [];
     if (Array.isArray(data)) {
       content = data;
@@ -182,45 +181,36 @@ class MedicineService {
     } else if (data.items && Array.isArray(data.items)) {
       content = data.items;
     }
-    
+
     const pageInfo = data.pageInfo || data.pagination || data.page || {};
 
-    // Log for debugging (can be removed later)
-    if (content.length > 0) {
-      console.log('💉 getAllMedicines - First medicine keys:', Object.keys(content[0]));
-      console.log('💉 getAllMedicines - First medicine ID:', content[0].id);
-      console.log('💉 getAllMedicines - First medicine image:', {
-        image: content[0].image,
-        imageUrl: content[0].imageUrl,
-        thumbnail: content[0].thumbnail,
-        files: content[0].files
-      });
+    const pageSize = pageInfo?.pageSize ?? pageInfo?.size ?? params.size ?? 10;
+    const total = pageInfo?.totalRecords ?? pageInfo?.total ?? content.length;
+    let totalPages = pageInfo?.totalPages;
+    if (totalPages == null || totalPages < 1) {
+      totalPages = Math.max(1, Math.ceil(total / Math.max(pageSize, 1)));
     }
 
     return {
       medicines: content,
       pagination: {
         page: (pageInfo?.pageNumber ?? pageInfo?.page ?? params.page ?? 0) + 1,
-        size: pageInfo?.pageSize ?? pageInfo?.size ?? params.size ?? 10,
-        total: pageInfo?.totalRecords ?? pageInfo?.total ?? content.length,
-        totalPages: pageInfo?.totalPages ?? 1,
+        size: pageSize,
+        total,
+        totalPages,
       },
     };
   }
 
   /**
-   * Fetches all medicines. Tries one request with size=500, then paginates if needed.
-   * Backend note: If the API always returns only the first N items (e.g. 17) and ignores
-   * size and page>0, the UI will show a "Showing X of Y" notice; fix getAllMedicines
-   * to honour size and page so all records can be loaded.
+   * Fetches all medicines. Tries one request with size=1000 (matches CureBasket getAllMedicines curl), then paginates if needed.
    */
   async getAllMedicinesAllPages(params: Omit<MedicineListParams, 'page' | 'size'> & { pageSize?: number } = {}): Promise<MedicineListResponse> {
     const requestedPageSize = params.pageSize ?? 20;
     const allMedicines: any[] = [];
     let total = 0;
 
-    // 1) Try a single request with large size so backend returns all (e.g. 26)
-    const largeRes = await this.getAllMedicines({ ...params, page: 0, size: 500 });
+    const largeRes = await this.getAllMedicines({ ...params, page: 0, size: 1000 });
     total = largeRes.pagination?.total ?? largeRes.medicines.length;
     allMedicines.push(...largeRes.medicines);
 

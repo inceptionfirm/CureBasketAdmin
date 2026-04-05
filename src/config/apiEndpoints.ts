@@ -18,6 +18,8 @@ export const API_ENDPOINTS = {
     createAdmin: '/user/createAdmin',
     edit: (id: string | number) => `/user/edit/${id}`,
     delete: (id: string | number) => `/user/delete/${id}`,
+    changeEmail: (id: string | number) => `/user/change-email/${id}`,
+    changePassword: (id: string | number) => `/user/change-password/${id}`,
   },
 
   // Banner endpoints

@@ -13,6 +13,11 @@ export interface AdminPrescription {
     email?: string;
     phone?: string;
   };
+  /** Raw API patientId (may be email or id) — sent back on update-prescription */
+  apiPatientId?: string;
+  doctorId?: string;
+  /** HIGH | MEDIUM | LOW from API */
+  priority?: string;
   doctorName: string;
   diagnosis?: string;
   notes?: string;
@@ -68,7 +73,7 @@ const AdminPrescriptionDetails: React.FC<AdminPrescriptionDetailsProps> = ({
 
   const handleApprove = async () => {
     if (prescription.medications.length === 0) {
-      alert('Add at least one medication, pick it from the list, and click "Save medicine" first.');
+      alert('Add at least one medication, pick it from the list, and click "Map medicines" first.');
       return;
     }
     const amountToUse =
@@ -275,7 +280,7 @@ const AdminPrescriptionDetails: React.FC<AdminPrescriptionDetailsProps> = ({
             />
           </section>
 
-          {/* Amount Section - shows after Save medicine (backend returns amount); admin can Edit */}
+          {/* Amount Section - shows after map-medicines (backend may return amount); admin can Edit */}
           <section className="prescription-section">
             <h3 className="section-title">Amount</h3>
             <div className="section-content">

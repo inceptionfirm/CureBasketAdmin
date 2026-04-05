@@ -238,6 +238,19 @@ class ClientConfigManager {
         ) {
           this.config.api.baseURL = DEFAULT_CLIENT_CONFIG.api.baseURL;
         }
+        // In development, ignore a stored absolute API URL (e.g. copied from production localStorage).
+        // Otherwise requests go straight to api.curebasket.com (cross-origin) and often return 401 even when
+        // the admin JWT exists — same token works via the Vite /api proxy (same-origin + forwarded Bearer).
+        if (
+          import.meta.env.DEV &&
+          typeof this.config.api.baseURL === 'string' &&
+          /^https?:\/\//i.test(this.config.api.baseURL)
+        ) {
+          console.warn(
+            '[clientConfig] Development: ignoring stored absolute api.baseURL; using /api/ proxy. Clear localStorage "clientConfig" if you did not intend to override the API.'
+          );
+          this.config.api.baseURL = '/api/';
+        }
       }
     } catch (error) {
       console.warn('Failed to load client config from storage:', error);

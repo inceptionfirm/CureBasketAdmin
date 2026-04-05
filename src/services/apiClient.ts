@@ -24,6 +24,42 @@ export interface APIRequest {
   timeout?: number;
 }
 
+function pickTrimmedString(v: unknown): string {
+  return typeof v === 'string' && v.trim() ? v.trim() : '';
+}
+
+/**
+ * CureBasket often returns HTTP 200 with `{ success: false, msg, error: [...] }`.
+ * Prefer msg/message; if error is a Java stack array (fileName/methodName), don't stringify it for users.
+ */
+function formatApiSuccessFalseMessage(result: any, endpoint: string): string {
+  const fromText = pickTrimmedString(result?.msg) || pickTrimmedString(result?.message);
+  if (fromText) {
+    return `${fromText} (Failed: success is false in the response body — HTTP 200 does not mean the update worked.)`;
+  }
+
+  const err = result?.error;
+  if (typeof err === 'string' && err.trim()) return err.trim();
+  if (Array.isArray(err) && err.length > 0) {
+    const looksLikeJavaStack = err.every(
+      (e: any) =>
+        e &&
+        typeof e === 'object' &&
+        typeof e.fileName === 'string' &&
+        typeof e.methodName === 'string'
+    );
+    if (looksLikeJavaStack) {
+      return 'Prescription update failed on the server (internal error in PrescriptionDTOs / toCatalogItemDTO). HTTP 200 can still be returned with success: false in the JSON body.';
+    }
+    const parts = err
+      .map((e: any) => (typeof e === 'string' ? e : e?.defaultMessage || e?.message))
+      .filter(Boolean);
+    if (parts.length) return parts.join('; ');
+  }
+
+  return `Request failed (${endpoint}). Response had success: false.`;
+}
+
 class APIClient {
   private baseURL: string;
   private defaultHeaders: Record<string, string>;
@@ -257,8 +293,29 @@ class APIClient {
       }
       
       if (!response.ok) {
-        // Extract error message from response body if available
-        const errorMessage = result?.message || result?.error || result?.msg || `HTTP ${response.status}: ${response.statusText}`;
+        // Extract error message from response body (Spring often uses message, error, or errors[])
+        let bodyHint = '';
+        if (result && typeof result === 'object') {
+          const errs = (result as any).errors;
+          if (Array.isArray(errs)) {
+            bodyHint = errs
+              .map((e: any) =>
+                e?.defaultMessage || e?.message || (typeof e === 'string' ? e : JSON.stringify(e))
+              )
+              .filter(Boolean)
+              .join('; ');
+          } else if (errs && typeof errs === 'object' && !Array.isArray(errs)) {
+            bodyHint = Object.entries(errs)
+              .map(([k, v]) => `${k}: ${Array.isArray(v) ? (v as string[]).join(', ') : String(v)}`)
+              .join('; ');
+          }
+        }
+        const errorMessage =
+          bodyHint ||
+          result?.message ||
+          result?.error ||
+          result?.msg ||
+          `HTTP ${response.status}: ${response.statusText}`;
         
         // Enhanced logging for debugging, especially for login
         if (endpoint.includes('/auth/login')) {
@@ -295,22 +352,19 @@ class APIClient {
       
       // If backend returns success: false, treat it as an error even if HTTP status is 200
       if (!responseSuccess) {
-        const raw = result?.message ?? result?.msg ?? result?.error ?? `Request failed: ${endpoint}`;
-        const errorMessage = typeof raw === 'string' ? raw
-          : Array.isArray(raw) ? raw.map((e: any) => e?.message ?? JSON.stringify(e)).join('; ')
-          : typeof raw === 'object' && raw != null && 'message' in raw ? String((raw as any).message) : JSON.stringify(raw);
-        
-        console.error('❌ API returned success: false:', {
+        const errorMessage = formatApiSuccessFalseMessage(result, endpoint);
+
+        console.error('❌ API returned success: false (HTTP may still be 2xx):', {
           status: response.status,
           endpoint,
           errorBody: result,
           errorMessage,
         });
-        
+
         return {
           success: false,
           error: errorMessage,
-          message: result?.message,
+          message: pickTrimmedString(result?.msg) || pickTrimmedString(result?.message) || errorMessage,
           data: result?.data || result,
         };
       }
